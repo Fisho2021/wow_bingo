@@ -1,3 +1,5 @@
+// static/miniapp/app.js
+
 const tg = window.Telegram?.WebApp;
 if (tg) {
     tg.ready();
@@ -5,14 +7,14 @@ if (tg) {
     tg.setHeaderColor('#2d2a3a');
 }
 
-const INIT_DATA = tg?.initData || '';
 // ═══ SOUND ═══
 let soundOn = true;
 let audioCtx = null;
 
 function toggleSound() {
     soundOn = !soundOn;
-    document.getElementById('soundVal').textContent = soundOn ? '🔊' : '🔇';
+    const el = document.getElementById('soundVal');
+    if (el) el.textContent = soundOn ? '🔊' : '🔇';
 }
 
 function beep(freq = 660, duration = 0.12, type = 'sine') {
@@ -36,14 +38,23 @@ function playBingoSound() {
     beep(660, 0.15); setTimeout(() => beep(880, 0.15), 150);
     setTimeout(() => beep(1100, 0.3), 300);
 }
+
+// ═══ API WRAPPER ═══
 async function api(path, opts = {}) {
+    const initData = window.Telegram?.WebApp?.initData || '';
     const headers = {
         'Content-Type': 'application/json',
-        'X-Telegram-Init-Data': INIT_DATA,
+        'Authorization': `TgWebApp ${initData}`, // ✅ Correct Auth Header
         ...(opts.headers || {}),
     };
-    const res = await fetch(path, { ...opts, headers });
-    return res.json();
+    try {
+        const res = await fetch(path, { ...opts, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: data.error || data.message || `Server Error` };
+        return { ok: true, ...data };
+    } catch (e) {
+        return { ok: false, error: 'Network Error' };
+    }
 }
 
 function updateTopBalance(value) {
@@ -60,75 +71,71 @@ async function loadMe() {
     return null;
 }
 
-// ---------- LOBBY ----------
-async function loadLobby() {
-    const list = document.getElementById('roomsList');
-    if (!list) return;
-
-    const r = await api('/api/lobby/');
-    if (!r.ok) { list.innerHTML = '<div class="loader">Failed to load</div>'; return; }
-
-    list.innerHTML = r.rooms.map(room => `
-        <div class="room-card">
-            <div>
-                <div class="room-stake">${room.stake}<small>ETB</small></div>
-            </div>
-            <div class="room-win">${room.prize_pool}<small>${room.players} players</small></div>
-            <div class="room-status">
-                <div class="badge ${room.status === 'waiting' ? 'ready' : ''}">${room.status.toUpperCase()}</div>
-                <button class="join-btn" onclick="joinRoom(${room.room_id})">JOIN</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function joinRoom(roomId) {
-    window.location.href = `/app/cartelas/${roomId}/`;
-}
-
-// ---------- GAME ----------
-let currentRoomId = null;
+// ═══ GAME PLAY ═══
 let pollTimer = null;
-
-async function loadGame() {
-    currentRoomId = window.ROOM_ID;
-    if (!currentRoomId) return;
-
-    // Load cartela + state
-    await refreshGame();
-    pollTimer = setInterval(refreshGame, 3000);
-}
 let _lastCalledCount = 0;
 
+async function loadGame() {
+    await refreshGame();
+    if (pollTimer) clearInterval(pollTimer);
+    // Poll every 2 seconds for faster number updates
+    pollTimer = setInterval(refreshGame, 2000);
+}
+
 async function refreshGame() {
-    const r = await api(`/api/room/${currentRoomId}/`);
-    if (!r.ok) return;
+    const r = await api('/api/game/');
+    if (!r.ok) {
+        console.error("Game API Error:", r.error);
+        return;
+    }
 
-    const called = r.round.called_numbers || [];
-    const last = called[called.length - 1];
+    // 🏆 1. CHECK FOR WINNER MODAL
+    if (r.round.status === 'finished' && r.winners && r.winners.length > 0) {
+        if (pollTimer) clearInterval(pollTimer);
+        const winner = r.winners[0];
 
-    // Play sound when a NEW number is drawn
+        document.getElementById('winnerName').textContent = winner.name;
+        document.getElementById('winnerCartelaNum').textContent = winner.cartela_number;
+
+        const gridContainer = document.getElementById('winnerGridContainer');
+        const flatNums = winner.numbers.flat();
+        const markedNums = winner.marked_numbers || [];
+
+        gridContainer.innerHTML = flatNums.map(n => {
+            const isMarked = markedNums.includes(n) ? 'background: #2ecc71; color: white;' : 'background: #fff; color: #333;';
+            return `<div style="padding: 5px 0; border-radius: 5px; font-size: 12px; font-weight: bold; ${isMarked}">${n}</div>`;
+        }).join('');
+
+        document.getElementById('winnerModal').style.display = 'flex';
+        playBingoSound();
+        return;
+    }
+
+    const roundData = r.round || {};
+    const called = roundData.called_numbers || [];
+    const last = called.length > 0 ? called[called.length - 1] : '-';
+
     if (called.length > _lastCalledCount && _lastCalledCount > 0) {
         playCallSound();
         if (tg) tg.HapticFeedback.impactOccurred('light');
     }
     _lastCalledCount = called.length;
 
-    // Big "current call" panel on the left
-    const bigCalled = document.getElementById('bigCalled');
-    if (bigCalled) bigCalled.textContent = last || '—';
+    // ── 2. UPDATE TOP UI BAR ──
+    if (document.getElementById('gameId')) document.getElementById('gameId').textContent = roundData.number ? `R${roundData.number}` : 'R0';
+    if (document.getElementById('playersVal')) document.getElementById('playersVal').textContent = roundData.players || 0;
+    if (document.getElementById('callVal')) document.getElementById('callVal').textContent = called.length;
+    if (document.getElementById('prizeVal')) document.getElementById('prizeVal').textContent = roundData.prize_pool || '0';
+    if (document.getElementById('currentCall')) document.getElementById('currentCall').textContent = last;
+    if (document.getElementById('statusText')) document.getElementById('statusText').textContent = roundData.status === 'active' ? 'Game Active!' : 'Waiting for players...';
+    if (document.getElementById('countdown')) document.getElementById('countdown').textContent = roundData.status === 'active' ? 'LIVE' : 'WAITING';
 
-    // Current call circle
-    document.getElementById('currentCall').textContent = last || '-';
+    if (document.getElementById('playersListText')) {
+        const pList = roundData.players_list || [];
+        document.getElementById('playersListText').textContent = `Players: ${pList.join(', ') || 'None'}`;
+    }
 
-    // Top info bar
-    document.getElementById('gameId').textContent = r.round.number ? `Y${r.round.number}` : '—';
-    document.getElementById('playersVal').textContent = r.round.players;
-    document.getElementById('stakeVal').textContent = r.room.stake;
-    document.getElementById('callVal').textContent = called.length;
-    document.getElementById('countdown').textContent = r.round.status;
-
-    // Left column: numbers 1-75
+    // ── 3. RENDER 1-75 BOARD ──
     const grid = document.getElementById('calledGrid');
     if (grid) {
         grid.innerHTML = Array.from({ length: 75 }, (_, i) => i + 1)
@@ -136,30 +143,80 @@ async function refreshGame() {
             .join('');
     }
 
-    // Cartela
-    if (r.my_cartela) {
-        const grid = r.my_cartela.numbers;
-        const cartelaEl = document.getElementById('cartelaGrid');
-        cartelaEl.innerHTML = grid.flat().map(n =>
-            `<div class="cell ${called.includes(n) ? 'marked' : ''}">${n}</div>`
-        ).join('');
-        document.getElementById('boardNumber').textContent = r.my_cartela.cartela_number;
+    // ── 4. RENDER MULTIPLE CARTELAS + BINGO BUTTONS ──
+    const cartelasContainer = document.getElementById('myCartelasContainer');
+    if (r.my_cartelas && r.my_cartelas.length > 0) {
+
+        // Loop through all cartelas the user owns
+        cartelasContainer.innerHTML = r.my_cartelas.map(cartela => {
+            const markedNums = cartela.marked || [];
+            const flatNums = cartela.numbers.flat();
+
+            // Build the 25 cells
+            const cellsHtml = flatNums.map(n => {
+                const isMarked = markedNums.includes(n);
+                const isCalled = called.includes(n);
+
+                let cellClass = 'cell';
+                if (isMarked) cellClass += ' marked';
+                else if (isCalled) cellClass += ' called'; // Highlight called numbers in Yellow
+
+                // Tapping a number sends a request to mark it
+                return `<div class="${cellClass}" onclick="toggleMark(${cartela.player_id}, ${n})">${n}</div>`;
+            }).join('');
+
+            // Return the card wrapper + 5x5 grid + individual BINGO button
+            return `
+            <div class="my-cartela-wrapper">
+                <div class="my-cartela-header">Cartela #${cartela.cartela_number}</div>
+                <div class="my-cartela-grid">${cellsHtml}</div>
+                <button class="bingo-btn-card" onclick="claimBingo()">🎉 BINGO!</button>
+            </div>
+            `;
+        }).join('');
+
+    } else if (cartelasContainer) {
+        cartelasContainer.innerHTML = '<div class="loader" style="color:white; text-align:center;">No cartela bought.</div>';
     }
 }
 
+// ═══ MARKING NUMBERS ═══
+async function toggleMark(playerId, number) {
+    const r = await api(`/api/player/${playerId}/mark/`, {
+        method: 'POST',
+        body: JSON.stringify({ number: number })
+    });
+
+    if (r.ok) {
+        if (tg) tg.HapticFeedback.impactOccurred('medium');
+        refreshGame(); // Reload UI immediately to show green mark
+    } else {
+        if (r.error === 'not_called_yet') {
+            if (tg) tg.showAlert('Wait for this number to be called!');
+        } else {
+            if (tg) tg.showAlert(r.error);
+        }
+    }
+}
+
+// ═══ CLAIM BINGO ═══
 async function claimBingo() {
-    const r = await api(`/api/room/${currentRoomId}/bingo/`, { method: 'POST' });
+    const r = await api('/api/bingo/', { method: 'POST' });
     if (r.ok) {
         playBingoSound();
         if (tg) tg.showAlert(`🎉 BINGO! Payout: ${JSON.stringify(r.payouts)}`);
-        clearInterval(pollTimer);
+        if (pollTimer) clearInterval(pollTimer);
+        setTimeout(() => window.location.href = '/app/wallet/', 2000);
     } else {
         beep(220, 0.3, 'square');
-        if (tg) tg.showAlert(`❌ ${r.error}`);
+        if (tg) tg.showAlert(`❌ ${r.error === 'FALSE_BINGO' ? r.message : r.error}`);
+        if (r.error === 'FALSE_BINGO') {
+            setTimeout(() => window.location.href = '/app/', 2000);
+        }
     }
 }
 
-// ---------- WALLET ----------
+// ═══ WALLET & PROFILE ═══
 async function loadWallet() {
     const r = await api('/api/wallet/');
     if (!r.ok) return;
@@ -181,12 +238,7 @@ async function loadWallet() {
 async function redeemCoupon() {
     const code = document.getElementById('couponInput').value.trim();
     if (!code) return;
-
-    const r = await api('/api/redeem/', {
-        method: 'POST',
-        body: JSON.stringify({ code }),
-    });
-
+    const r = await api('/api/redeem/', { method: 'POST', body: JSON.stringify({ code }) });
     if (r.ok) {
         if (tg) tg.showAlert(`✅ Redeemed! New balance: ${r.new_balance} birr`);
         document.getElementById('couponInput').value = '';
@@ -196,7 +248,6 @@ async function redeemCoupon() {
     }
 }
 
-// ---------- HISTORY ----------
 async function loadHistory() {
     const r = await api('/api/history/');
     if (!r.ok) return;
@@ -217,7 +268,6 @@ async function loadHistory() {
     `).join('') || '<div class="loader">No games yet</div>';
 }
 
-
 async function loadProfile() {
     const u = await loadMe();
     if (!u) return;
@@ -232,32 +282,23 @@ async function loadProfile() {
 async function saveNickname() {
     const nick = document.getElementById('nicknameInput').value.trim();
     if (!nick) return;
-
-    const r = await api('/api/me/nickname/', {
-        method: 'POST',
-        body: JSON.stringify({ nickname: nick })
-    });
-
+    const r = await api('/api/me/nickname/', { method: 'POST', body: JSON.stringify({ nickname: nick }) });
     if (r.ok) {
         if (tg) tg.showAlert(`✅ Nickname updated to: ${r.nickname}`);
-        await loadProfile(); // Reload to show updated name
+        await loadProfile();
     } else {
         if (tg) tg.showAlert(`❌ Error: ${r.error}`);
     }
 }
 
-    document.getElementById('saveNicknameBtn')?.addEventListener('click', saveNickname);
-
-// DEPOSIT
 async function requestDeposit() {
     const amt = document.getElementById('depositAmount').value;
     if (!amt) return;
     const r = await api('/api/deposit/', { method: 'POST', body: JSON.stringify({ amount: amt }) });
-    if (r.ok) { tg?.showAlert(r.message); document.getElementById('depositAmount').value = ''; }
+    if (r.ok) { tg?.showAlert(r.message || "Deposit requested!"); document.getElementById('depositAmount').value = ''; }
     else tg?.showAlert(`❌ ${r.error}`);
 }
 
-// WITHDRAW
 async function requestWithdrawal() {
     const phone = document.getElementById('withdrawPhone').value;
     const amt = document.getElementById('withdrawAmount').value;
@@ -271,7 +312,6 @@ async function requestWithdrawal() {
     } else tg?.showAlert(`❌ ${r.error}`);
 }
 
-// REFERRALS
 async function loadReferrals() {
     const r = await api('/api/referrals/');
     if (!r.ok) return;
@@ -280,14 +320,33 @@ async function loadReferrals() {
     document.getElementById('refList').innerHTML = r.list.map(x => `<div>👤 ${x.name} (${x.date})</div>`).join('') || '<div>No referrals yet.</div>';
 }
 
+// ═══ INITIALIZATION ═══
 document.addEventListener('DOMContentLoaded', async () => {
-    // ... existing code ...
+    // 1. Determine which page we are on and load the correct data
+    const path = window.location.pathname;
 
-    // Add these listeners at the very bottom of the file
+    if (path.includes('/app/game/')) {
+        await loadGame();
+    } else if (path.includes('/app/wallet/')) {
+        await loadWallet();
+    } else if (path.includes('/app/history/')) {
+        await loadHistory();
+    } else if (path.includes('/app/profile/')) {
+        await loadProfile();
+    }
+
+    // 2. Attach Event Listeners
     document.getElementById('depositBtn')?.addEventListener('click', requestDeposit);
     document.getElementById('withdrawBtn')?.addEventListener('click', requestWithdrawal);
     document.getElementById('saveNicknameBtn')?.addEventListener('click', saveNickname);
 
+    // Global Refresh Button (for game or wallet)
+    document.getElementById('refreshBtn')?.addEventListener('click', () => {
+        if (path.includes('/app/game/')) refreshGame();
+        if (path.includes('/app/wallet/')) loadWallet();
+    });
+
+    // Referrals
     if (document.getElementById('refLink')) {
         await loadReferrals();
         document.getElementById('copyRefBtn')?.addEventListener('click', () => {

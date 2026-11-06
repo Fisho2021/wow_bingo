@@ -8,7 +8,6 @@
     <div class="info-box"><div class="lbl">Stake</div><div class="val" id="stakeVal">10</div></div>
     <div class="info-box"><div class="lbl">Call</div><div class="val" id="callVal">0</div></div>
     <div class="info-box" style="background: #ffd166; color: #2d2a3a;"><div class="lbl" style="color: #333;">Prize</div><div class="val" id="prizeVal">0</div></div>
-    <!-- 👇 ONLY ONE SOUND TOGGLE -->
     <div class="info-box sound-box" onclick="toggleSound()">
         <div class="lbl">Sound</div>
         <div class="val" id="soundVal">🔊</div>
@@ -28,6 +27,7 @@
 
 <!-- MAIN GAME AREA -->
 <div class="game-layout">
+    <!-- LEFT SIDE: 1-75 BOARD -->
     <div class="called-panel">
         <div class="bingo-header">
             <div class="bh bh-b">B</div><div class="bh bh-i">I</div>
@@ -39,24 +39,27 @@
         <div class="called-grid" id="calledGrid"></div>
     </div>
 
+    <!-- RIGHT SIDE: CURRENT CALL & MY CARTELAS -->
     <div class="cartela-panel">
         <div class="current-call-box">
             <div class="cc-label">Current Call</div>
             <div class="cc-circle" id="currentCall">-</div>
         </div>
-        <div id="myCartelasContainer"></div>
+
+        <!-- ✅ This container will hold all your 5x5 cartelas and their individual BINGO buttons -->
+        <div id="myCartelasContainer" style="margin-top: 15px; max-height: 500px; overflow-y: auto; padding-bottom: 20px;"></div>
     </div>
 </div>
 
-<button class="bingo-btn" id="bingoBtn">BINGO!</button>
-<div class="row-btns">
+<!-- BOTTOM BUTTONS (Global Bingo button removed) -->
+<div class="row-btns" style="margin-top: 15px;">
     <button class="btn-blue" id="refreshBtn">⟳ Refresh</button>
-    <button class="btn-red" id="leaveBtn">⏻ Leave</button>
+    <button class="btn-red" id="leaveBtn" onclick="window.location.href='/app/cartelas/'">⏻ Leave</button>
 </div>
 
 <!-- WINNER MODAL -->
-<div id="winnerModal" class="modal" style="display:none; background: rgba(0,0,0,0.9);">
-    <div class="modal-content" style="background: #0d111a; border: 2px solid #2a3143; border-radius: 25px; padding: 30px 20px; width: 100%; max-width: 350px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);">
+<div id="winnerModal" class="modal" style="display:none; background: rgba(0,0,0,0.9); position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-content" style="background: #0d111a; border: 2px solid #2a3143; border-radius: 25px; padding: 30px 20px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);">
         <div style="font-size: 45px; margin-bottom: 5px; filter: drop-shadow(0 0 10px rgba(255,215,0,0.5));">👑</div>
         <h2 style="color: #ffd166; font-size: 28px; font-weight: 900; margin-bottom: 10px; letter-spacing: 1px;">🎉 BINGO! 🎉</h2>
 
@@ -65,7 +68,7 @@
         </p>
 
         <p style="color: #ffd166; font-size: 12px; letter-spacing: 2px; margin-bottom: 15px;">
-            CARTEL NO #<span id="winnerCartelaNum">000</span>
+            CARTELA NO #<span id="winnerCartelaNum">000</span>
         </p>
 
         <div style="background: #1e2230; border-radius: 15px; padding: 10px; margin-bottom: 20px;">
@@ -80,19 +83,10 @@
             <div id="winnerGridContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;"></div>
         </div>
 
-        <p style="color: #a8a8b3; font-size: 11px; letter-spacing: 1px; margin-bottom: 8px;">
-            STARTING IN <span id="modalCountdown" style="color: #e67e22; font-weight: bold;">5S</span>
-        </p>
-
-        <div style="width: 100%; height: 6px; background: #2a3143; border-radius: 3px; overflow: hidden; margin-bottom: 20px;">
-            <div id="modalProgressBar" style="width: 100%; height: 100%; background: #e67e22; transition: width 1s linear;"></div>
-        </div>
-
-        <button class="modal-btn" onclick="window.location.href='/app/cartelas/'" style="background: #e67e22; color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 900; font-size: 16px; cursor: pointer;">
+        <button class="modal-btn" onclick="window.location.href='/app/cartelas/'" style="background: #e67e22; color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 900; font-size: 16px; cursor: pointer; margin-top: 10px;">
             PLAY NEXT GAME
         </button>
     </div>
 </div>
 
-<script src="/static/miniapp/game.js?v=125"></script>
 {% endblock %}

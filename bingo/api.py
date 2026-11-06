@@ -9,7 +9,7 @@ from django.conf import settings
 
 from .models import (
     TelegramUser, Cartela, GameRoom, GameRound,
-    Transaction, DepositRequest, WithdrawalRequest
+    Transaction, DepositRequest, WithdrawalRequest, Coupon
 )
 from .game_logic import draw_number, detect_line, line_numbers, find_winners, generate_cartelas
 from .webapp_auth import webapp_auth_required
@@ -83,6 +83,11 @@ def dashboard_state(request):
 @webapp_auth_required
 def list_cartelas(request):
     room = _get_room()
+
+    # ✅ FIX: Only generate 200 cartelas, and only if they don't exist yet
+    if Cartela.objects.count() < 200:
+        generate_cartelas(200)
+
     round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
 
     if not round_obj:
@@ -100,7 +105,6 @@ def list_cartelas(request):
     current_players = round_obj.players if isinstance(round_obj.players, list) else []
     sold_numbers = [p['cartela_number'] for p in current_players]
 
-    generate_cartelas(400)
     cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number'))
 
     cartelas_data = []
@@ -138,7 +142,8 @@ def toggle_cartela(request):
     user = request.tg_user
 
     with transaction.atomic():
-        round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
+        # ✅ FIX: Lock the round so two people can't buy the same cartela simultaneously
+        round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by('-id').first()
         if not round_obj:
             return _json({'ok': False, 'error': 'Purchasing is closed. Game starting.'}, 400)
 
@@ -152,10 +157,14 @@ def toggle_cartela(request):
                                 p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number), None)
 
         if existing_player:
-            round_obj.players = [p for p in current_players if
-                                 not (p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number)]
+            # Release Cartela
+            current_players = [p for p in current_players if
+                               not (p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number)]
+            round_obj.players = current_players  # ✅ Explicit reassignment
+
             c.is_sold = False
             c.save()
+
             user.balance += room.stake
             user.save()
             Transaction.objects.create(user=user, amount=room.stake, type='refund',
@@ -165,6 +174,7 @@ def toggle_cartela(request):
             return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
 
         else:
+            # Buy Cartela
             if any(p['cartela_number'] == c.cartela_number for p in current_players):
                 return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
 
@@ -182,7 +192,8 @@ def toggle_cartela(request):
                 'line_numbers': []
             }
 
-            round_obj.players = current_players + [new_player]
+            round_obj.players = current_players + [new_player]  # ✅ Explicit reassignment
+
             user.balance -= room.stake
             user.save()
             Transaction.objects.create(user=user, amount=-room.stake, type='buy_cartela',
@@ -318,7 +329,7 @@ def toggle_mark(request, player_id):
             if number in flat_nums:
                 marked = set(p.get('marked_numbers', []))
 
-                # 👇 PERMANENT MARK: Only add, never remove
+                # ✅ PERMANENT MARK: Only add, never remove
                 if number not in marked:
                     marked.add(number)
                     p['marked_numbers'] = list(marked)
@@ -332,7 +343,8 @@ def toggle_mark(request, player_id):
                     updated = True
 
     if updated:
-        round_obj.save()
+        round_obj.players = current_players  # ✅ Explicit reassignment to save JSON
+        round_obj.save(update_fields=['players'])
         return _json({'ok': True})
 
     return _json({'ok': False, 'error': 'already_marked_or_not_found'}, 400)
@@ -364,7 +376,7 @@ def claim_bingo(request):
 
         if not has_valid_bingo:
             round_obj.players = [p for p in current_players if p['player_id'] != request.tg_user.telegram_id]
-            round_obj.save()
+            round_obj.save(update_fields=['players'])
             return _json({
                 'ok': False,
                 'error': 'FALSE_BINGO',
@@ -637,14 +649,12 @@ def _tick_room(room):
         if not active.last_draw_at or (now - active.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
             draw_number(active)
             active.last_draw_at = now
-            active.players = active.players if isinstance(active.players, list) else []
-            active.save()
+            active.save(update_fields=['called_numbers', 'last_draw_at'])
 
         winners = find_winners(active)
         if winners or len(active.called_numbers or []) >= 75:
             active.status = 'finished'
             active.finished_at = timezone.now()
-            active.players = active.players if isinstance(active.players, list) else []
             active.save()
 
             if winners:
