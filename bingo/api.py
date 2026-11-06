@@ -84,9 +84,12 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
-    # ✅ FIX: Only generate 200 cartelas, and only if they don't exist yet
+    # ✅ FIX 1: Ensure exactly 200 cartelas exist
     if Cartela.objects.count() < 200:
         generate_cartelas(200)
+
+    # ✅ FIX 2: Only fetch the first 200 cartelas
+    cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number')[:200])
 
     round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
 
@@ -104,8 +107,6 @@ def list_cartelas(request):
 
     current_players = round_obj.players if isinstance(round_obj.players, list) else []
     sold_numbers = [p['cartela_number'] for p in current_players]
-
-    cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number'))
 
     cartelas_data = []
     for c in cartelas:
@@ -133,78 +134,92 @@ def list_cartelas(request):
 @webapp_auth_required
 @require_http_methods(["POST"])
 def toggle_cartela(request):
-    body = json.loads(request.body or '{}')
-    cartela_id = body.get('cartela_id')
-    if not cartela_id:
-        return _json({'ok': False, 'error': 'missing_cartela_id'}, 400)
+    try:  # ✅ ADDED TRY/EXCEPT TO CATCH THE CRASH
+        body = json.loads(request.body or '{}')
+        cartela_id = body.get('cartela_id')
+        if not cartela_id:
+            return _json({'ok': False, 'error': 'missing_cartela_id'}, 400)
 
-    room = _get_room()
-    user = request.tg_user
+        room = _get_room()
+        user = request.tg_user
 
-    with transaction.atomic():
-        # ✅ FIX: Lock the round so two people can't buy the same cartela simultaneously
-        round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by('-id').first()
-        if not round_obj:
-            return _json({'ok': False, 'error': 'Purchasing is closed. Game starting.'}, 400)
+        with transaction.atomic():
+            round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by(
+                '-id').first()
+            if not round_obj:
+                return _json({'ok': False, 'error': 'Purchasing is closed. Game starting.'}, 400)
 
-        try:
-            c = Cartela.objects.get(id=cartela_id)
-        except Cartela.DoesNotExist:
-            return _json({'ok': False, 'error': 'Cartela not found.'}, 404)
+            try:
+                c = Cartela.objects.get(id=cartela_id)
+            except Cartela.DoesNotExist:
+                return _json({'ok': False, 'error': 'Cartela not found.'}, 404)
 
-        current_players = round_obj.players if isinstance(round_obj.players, list) else []
-        existing_player = next((p for p in current_players if
-                                p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number), None)
+            current_players = round_obj.players if isinstance(round_obj.players, list) else []
+            existing_player = next((p for p in current_players if
+                                    p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number),
+                                   None)
 
-        if existing_player:
-            # Release Cartela
-            current_players = [p for p in current_players if
-                               not (p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number)]
-            round_obj.players = current_players  # ✅ Explicit reassignment
+            if existing_player:
+                # Release Cartela
+                current_players = [p for p in current_players if
+                                   not (p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number)]
+                round_obj.players = current_players
 
-            c.is_sold = False
-            c.save()
+                c.is_sold = False
+                c.save()
 
-            user.balance += room.stake
-            user.save()
-            Transaction.objects.create(user=user, amount=room.stake, type='refund',
-                                       note=f"Released Cartela #{c.cartela_number}")
-            round_obj.recalculate_pool()
-            round_obj.save()
-            return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
+                user.balance += room.stake
+                user.save()
+                Transaction.objects.create(user=user, amount=room.stake, type='refund',
+                                           note=f"Released Cartela #{c.cartela_number}")
 
-        else:
-            # Buy Cartela
-            if any(p['cartela_number'] == c.cartela_number for p in current_players):
-                return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
+                # Check if method exists before calling
+                if hasattr(round_obj, 'recalculate_pool'):
+                    round_obj.recalculate_pool()
 
-            if user.balance < room.stake:
-                return _json({'ok': False, 'error': 'Insufficient balance.'}, 400)
+                round_obj.save()
+                return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
 
-            c.is_sold = True
-            c.save()
+            else:
+                # Buy Cartela
+                if any(p['cartela_number'] == c.cartela_number for p in current_players):
+                    return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
 
-            new_player = {
-                'player_id': user.telegram_id,
-                'cartela_number': c.cartela_number,
-                'numbers': c.numbers,
-                'marked_numbers': [],
-                'line_numbers': []
-            }
+                if user.balance < room.stake:
+                    return _json({'ok': False, 'error': 'Insufficient balance.'}, 400)
 
-            round_obj.players = current_players + [new_player]  # ✅ Explicit reassignment
+                c.is_sold = True
+                c.save()
 
-            user.balance -= room.stake
-            user.save()
-            Transaction.objects.create(user=user, amount=-room.stake, type='buy_cartela',
-                                       note=f"Bought Cartela #{c.cartela_number}")
-            round_obj.recalculate_pool()
+                new_player = {
+                    'player_id': user.telegram_id,
+                    'cartela_number': c.cartela_number,
+                    'numbers': c.numbers,
+                    'marked_numbers': [],
+                    'line_numbers': []
+                }
 
-            if not round_obj.start_at:
-                round_obj.start_at = timezone.now() + timedelta(seconds=60)
-            round_obj.save()
+                round_obj.players = current_players + [new_player]
 
-            return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
+                user.balance -= room.stake
+                user.save()
+                Transaction.objects.create(user=user, amount=-room.stake, type='buy_cartela',
+                                           note=f"Bought Cartela #{c.cartela_number}")
+
+                # Check if method exists before calling
+                if hasattr(round_obj, 'recalculate_pool'):
+                    round_obj.recalculate_pool()
+
+                if not round_obj.start_at:
+                    round_obj.start_at = timezone.now() + timedelta(seconds=60)
+                round_obj.save()
+
+                return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # Prints to Render Logs
+        return _json({'ok': False, 'error': f"Python Crash: {str(e)}"}, 500)
 
 
 @webapp_auth_required
