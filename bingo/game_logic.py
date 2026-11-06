@@ -1,5 +1,5 @@
 import random
-from .models import Cartela
+from .models import Cartela, PlayerCartela
 
 
 def generate_cartelas(count=200):
@@ -33,6 +33,7 @@ def draw_number(round_obj):
 def detect_line(cartela_numbers, marked_numbers):
     """
     Checks for valid Bingo lines: Horizontal, Vertical, Diagonal, or 4 Corners.
+    Returns a dictionary describing the line, or False if no line.
     The center cell is automatically considered marked.
     """
     # Ensure the center cell (index 12) is ALWAYS marked
@@ -41,20 +42,23 @@ def detect_line(cartela_numbers, marked_numbers):
         marked_numbers.add(center_number)
 
     # 1. Check Rows
-    for row in cartela_numbers:
+    for i, row in enumerate(cartela_numbers):
         if all(num in marked_numbers for num in row):
-            return True
+            return {'type': 'row', 'index': i}
 
     # 2. Check Columns
     for col in range(5):
         if all(cartela_numbers[row][col] in marked_numbers for row in range(5)):
-            return True
+            return {'type': 'col', 'index': col}
 
     # 3. Check Diagonals
     diag1 = [cartela_numbers[i][i] for i in range(5)]
-    diag2 = [cartela_numbers[i][4-i] for i in range(5)]
-    if all(num in marked_numbers for num in diag1) or all(num in marked_numbers for num in diag2):
-        return True
+    diag2 = [cartela_numbers[i][4 - i] for i in range(5)]
+
+    if all(num in marked_numbers for num in diag1):
+        return {'type': 'diag', 'which': 'main'}
+    if all(num in marked_numbers for num in diag2):
+        return {'type': 'diag', 'which': 'anti'}
 
     # 4. Check 4 Corners
     corners = [
@@ -62,31 +66,51 @@ def detect_line(cartela_numbers, marked_numbers):
         cartela_numbers[4][0], cartela_numbers[4][4]
     ]
     if all(num in marked_numbers for num in corners):
-        return True
+        return {'type': 'corners'}
 
     return False
 
 
 def line_numbers(grid, line):
-    if not line: return set()
+    if not line:
+        return set()
+
     t = line['type']
-    if t == 'row': return set(grid[line['index']])
-    if t == 'col': return {grid[r][line['index']] for r in range(5)}
-    if t == 'diag': return {grid[i][i] for i in range(5)} if line['which'] == 'main' else {grid[i][4 - i] for i in
-                                                                                           range(5)}
+
+    if t == 'row':
+        return set(grid[line['index']])
+
+    if t == 'col':
+        return {grid[r][line['index']] for r in range(5)}
+
+    if t == 'diag':
+        if line['which'] == 'main':
+            return {grid[i][i] for i in range(5)}
+        else:
+            return {grid[i][4 - i] for i in range(5)}
+
+    if t == 'corners':
+        return {
+            grid[0][0], grid[0][4],
+            grid[4][0], grid[4][4]
+        }
+
     return set()
 
 
 def find_winners(round_obj):
     winners = []
     called = set(round_obj.called_numbers or [])
-    players = round_obj.players if isinstance(round_obj.players, list) else []
+
+    # ✅ FIXED: Use PlayerCartela relational model instead of JSON list
+    players = PlayerCartela.objects.filter(round=round_obj)
 
     for p in players:
-        # 👇 FIX: Treat player as a dictionary instead of a Django model
-        marked = set(p.get('marked_numbers', []))
+        marked = set(p.marked_numbers or [])
         valid_marks = marked & called
-        line = detect_line(p['numbers'], valid_marks)
+        line = detect_line(p.cartela.numbers, valid_marks)
         if line:
+            # p is a PlayerCartela object, line is the dictionary
             winners.append((p, line))
+
     return winners

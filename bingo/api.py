@@ -12,7 +12,7 @@ from django.conf import settings
 from .models import (
     TelegramUser, Cartela, GameRoom, GameRound,
     Transaction, DepositRequest, WithdrawalRequest,
-    PlayerCartela  # ✅ Imported the relational model
+    PlayerCartela
 )
 from .game_logic import draw_number, detect_line, line_numbers, find_winners, generate_cartelas
 from .webapp_auth import webapp_auth_required
@@ -87,7 +87,6 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
-    # ✅ Ensure exactly 200 cartelas exist in the DB
     cartela_count = Cartela.objects.count()
     if cartela_count > 200:
         ids_to_keep = list(Cartela.objects.order_by('cartela_number').values_list('id', flat=True)[:200])
@@ -111,7 +110,6 @@ def list_cartelas(request):
         round_obj.start_at = timezone.now() + timedelta(seconds=60)
         round_obj.save()
 
-    # ✅ Query via PlayerCartela
     current_players = PlayerCartela.objects.filter(round=round_obj).select_related('cartela', 'user')
     sold_numbers = {p.cartela.cartela_number for p in current_players}
 
@@ -162,7 +160,6 @@ def toggle_cartela(request):
             except Cartela.DoesNotExist:
                 return _json({'ok': False, 'error': 'Cartela not found.'}, 404)
 
-            # ✅ Use PlayerCartela relation
             existing = PlayerCartela.objects.filter(round=round_obj, user=user, cartela=c).first()
 
             if existing:
@@ -247,25 +244,26 @@ def game_state(request):
     active_round = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
 
     if active_round:
-        # ✅ FIX: Trigger the 5-second drawing logic directly inside the API
         now = timezone.now()
         if not active_round.last_draw_at or (now - active_round.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
             draw_number(active_round)
             active_round.last_draw_at = now
             active_round.save(update_fields=['called_numbers', 'last_draw_at'])
 
-            # Check if there is a winner
-            winners = find_winners(active_round)
-            if winners or len(active_round.called_numbers or []) >= 75:
-                active_round.status = 'finished'
-                active_round.finished_at = timezone.now()
-                active_round.save()
+            try:
+                winners = find_winners(active_round)
+                if winners or len(active_round.called_numbers or []) >= 75:
+                    active_round.status = 'finished'
+                    active_round.finished_at = timezone.now()
+                    active_round.save()
 
-                if winners:
-                    _settle_round(active_round, winners)
-                _schedule_next_round(room)
+                    if winners:
+                        _settle_round(active_round, winners)
+                    _schedule_next_round(room)
+            except Exception as e:
+                print(f"⚠️ Auto winner check error: {e}")
 
-        round_obj = GameRound.objects.filter(id=active_round.id).first()  # Refresh object
+        round_obj = GameRound.objects.filter(id=active_round.id).first()
     else:
         recent_finished = GameRound.objects.filter(
             room=room, status='finished', finished_at__gte=timezone.now() - timedelta(seconds=60)
@@ -287,14 +285,23 @@ def game_state(request):
         for p in current_players:
             if p.user.telegram_id == request.tg_user.telegram_id:
                 marked = set(p.marked_numbers or [])
-                line = detect_line(p.cartela.numbers, marked & called)
+
+                # ✅ FIXED: Safely catch line detection errors
+                try:
+                    line = detect_line(p.cartela.numbers, marked & called)
+                    line_nums = list(line_numbers(p.cartela.numbers, line)) if line else []
+                except Exception as e:
+                    print(f"⚠️ Line detection error in game_state: {e}")
+                    line = False
+                    line_nums = []
+
                 my_cartelas.append({
                     'player_id': p.user.telegram_id,
                     'cartela_number': p.cartela.cartela_number,
                     'numbers': p.cartela.numbers,
                     'marked': list(marked),
                     'line': line,
-                    'line_numbers': list(line_numbers(p.cartela.numbers, line)) if line else [],
+                    'line_numbers': line_nums,
                 })
 
         if round_obj.status == 'finished':
@@ -349,7 +356,6 @@ def toggle_mark(request, player_id):
     if number not in called:
         return _json({'ok': False, 'error': 'not_called_yet'}, 400)
 
-    # ✅ Update via PlayerCartela
     my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
     updated = False
     for pc in my_pcs:
@@ -361,8 +367,15 @@ def toggle_mark(request, player_id):
             continue
         marked.add(number)
         pc.marked_numbers = list(marked)
-        line = detect_line(pc.cartela.numbers, marked)
-        pc.line_numbers = list(line_numbers(pc.cartela.numbers, line)) if line else []
+
+        # ✅ FIXED: Safely catch line detection errors
+        try:
+            line = detect_line(pc.cartela.numbers, marked)
+            pc.line_numbers = list(line_numbers(pc.cartela.numbers, line)) if line else []
+        except Exception as e:
+            print(f"⚠️ Line detection error in toggle_mark: {e}")
+            pc.line_numbers = []
+
         pc.save(update_fields=['marked_numbers', 'line_numbers'])
         updated = True
 
@@ -387,10 +400,16 @@ def claim_bingo(request):
             return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
         called = set(round_obj.called_numbers or [])
-        has_valid_bingo = any(
-            detect_line(pc.cartela.numbers, set(pc.marked_numbers) & called)
-            for pc in my_pcs
-        )
+        has_valid_bingo = False
+
+        # ✅ FIXED: Safely catch bingo detection errors
+        for pc in my_pcs:
+            try:
+                if detect_line(pc.cartela.numbers, set(pc.marked_numbers) & called):
+                    has_valid_bingo = True
+                    break
+            except Exception as e:
+                print(f"⚠️ Bingo validation error: {e}")
 
         if not has_valid_bingo:
             my_pcs.delete()
@@ -404,8 +423,13 @@ def claim_bingo(request):
         round_obj.finished_at = timezone.now()
         round_obj.save()
 
-        winners = find_winners(round_obj)
-        payouts = _settle_round(round_obj, winners) if winners else {}
+        try:
+            winners = find_winners(round_obj)
+            payouts = _settle_round(round_obj, winners) if winners else {}
+        except Exception as e:
+            print(f"❌ Payout error: {e}")
+            payouts = {}
+
         _schedule_next_round(room)
 
     return _json({'ok': True, 'payouts': payouts})
@@ -615,7 +639,6 @@ def admin_force_start(request):
 def _tick_room(room):
     waiting = GameRound.objects.filter(room=room, status='waiting').first()
     if waiting and waiting.start_at and timezone.now() >= waiting.start_at:
-        # ✅ Count unique users via PlayerCartela
         unique_players = PlayerCartela.objects.filter(round=waiting).values('user').distinct().count()
 
         if unique_players >= 2:
@@ -647,14 +670,20 @@ def _tick_room(room):
 
 
 def _settle_round(round_obj, winners):
+    # ✅ FIXED: Safely handle winners whether it's a list of tuples or objects
     pool = round_obj.prize_pool
-    # Sort winners so the first one gets the 60%
-    ordered = sorted(winners, key=lambda x: x[0].cartela.cartela_number)
+    pcs = []
+    for w in winners:
+        if isinstance(w, tuple) or isinstance(w, list):
+            pcs.append(w[0])
+        else:
+            pcs.append(w)
+
+    ordered = sorted(pcs, key=lambda pc: pc.cartela.cartela_number)
     payouts = {}
 
     if len(ordered) == 1:
-        # Only 1 winner: gets 100%
-        pc = ordered[0][0]
+        pc = ordered[0]
         user = pc.user
         user.balance += pool
         user.total_earned += pool
@@ -663,16 +692,16 @@ def _settle_round(round_obj, winners):
         Transaction.objects.create(user=user, amount=pool, type='win', note=f"Round #{round_obj.round_number} winner")
 
     elif len(ordered) >= 2:
-        # 2+ winners: 60% to first, remaining 40% split among the rest
-        first_pc = ordered[0][0]
-        first_user = first_pc.user
-        first_share = pool * Decimal('0.60')
+        # 60% to first winner
+        pc_first = ordered[0]
+        user_first = pc_first.user
+        share_first = pool * Decimal('0.60')
 
-        first_user.balance += first_share
-        first_user.total_earned += first_share
-        first_user.save()
-        payouts[first_user.telegram_id] = str(first_share)
-        Transaction.objects.create(user=first_user, amount=first_share, type='win',
+        user_first.balance += share_first
+        user_first.total_earned += share_first
+        user_first.save()
+        payouts[user_first.telegram_id] = str(share_first)
+        Transaction.objects.create(user=user_first, amount=share_first, type='win',
                                    note=f"Round #{round_obj.round_number} first winner (60%)")
 
         # Distribute the 40%
@@ -692,7 +721,6 @@ def _settle_round(round_obj, winners):
     return payouts
 
 
-
 def _schedule_next_round(room):
     if GameRound.objects.filter(room=room, status='waiting').exists():
         return
@@ -705,9 +733,10 @@ def _schedule_next_round(room):
         round_number=next_num, room_id=room.id, entry_fee=room.stake,
         status='waiting', start_at=timezone.now() + timedelta(seconds=60)
     )
+
+
 @csrf_exempt
 @webapp_auth_required
 @require_http_methods(["POST"])
 def redeem_coupon(request):
-    # Placeholder function to prevent urls.py from crashing
     return _json({'ok': False, 'error': 'Coupon system is currently disabled.'}, 400)
