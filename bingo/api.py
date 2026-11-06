@@ -667,3 +667,9 @@ def _schedule_next_round(room):
         round_number=next_num, room_id=room.id, entry_fee=room.stake,
         status='waiting', start_at=timezone.now() + timedelta(seconds=60)
     )
+@csrf_exempt
+@webapp_auth_required
+@require_http_methods(["POST"])
+def redeem_coupon(request):
+    # Placeholder function to prevent urls.py from crashing
+    return _json({'ok': False, 'error': 'Coupon system is currently disabled.'}, 400)

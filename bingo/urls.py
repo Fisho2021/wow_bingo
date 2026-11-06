@@ -5,7 +5,7 @@ from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
 
-from bingo.views import telegram_webhook, set_webhook, clear_webhook
+import bingo.views
 from bingo import api
 
 
@@ -40,7 +40,7 @@ urlpatterns = [
     path('api/scores/', api.scores),
     path('api/history/', api.history),
     path('api/wallet/', api.wallet),
-    #path('api/redeem/', api.redeem_coupon),
+
     path('api/me/nickname/', api.update_nickname),
     path('api/deposit/', api.request_deposit),
     path('api/withdraw/', api.request_withdrawal),
