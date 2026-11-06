@@ -234,7 +234,6 @@ def game_state(request):
 
     waiting = GameRound.objects.filter(room=room, status='waiting').first()
     if waiting and waiting.start_at and timezone.now() >= waiting.start_at:
-        # ✅ Count unique users via PlayerCartela
         unique_players = PlayerCartela.objects.filter(round=waiting).values('user').distinct().count()
         if unique_players >= 2:
             waiting.status = 'active'
@@ -246,8 +245,27 @@ def game_state(request):
             waiting.save()
 
     active_round = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
+
     if active_round:
-        round_obj = active_round
+        # ✅ FIX: Trigger the 5-second drawing logic directly inside the API
+        now = timezone.now()
+        if not active_round.last_draw_at or (now - active_round.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
+            draw_number(active_round)
+            active_round.last_draw_at = now
+            active_round.save(update_fields=['called_numbers', 'last_draw_at'])
+
+            # Check if there is a winner
+            winners = find_winners(active_round)
+            if winners or len(active_round.called_numbers or []) >= 75:
+                active_round.status = 'finished'
+                active_round.finished_at = timezone.now()
+                active_round.save()
+
+                if winners:
+                    _settle_round(active_round, winners)
+                _schedule_next_round(room)
+
+        round_obj = GameRound.objects.filter(id=active_round.id).first()  # Refresh object
     else:
         recent_finished = GameRound.objects.filter(
             room=room, status='finished', finished_at__gte=timezone.now() - timedelta(seconds=60)
@@ -259,7 +277,6 @@ def game_state(request):
     unique_user_ids = set()
 
     if round_obj:
-        # ✅ Query via PlayerCartela
         current_players = PlayerCartela.objects.filter(round=round_obj).select_related('user', 'cartela')
         unique_user_ids = {p.user.telegram_id for p in current_players}
 

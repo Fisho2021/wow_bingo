@@ -121,7 +121,7 @@ async function refreshGame() {
     }
     _lastCalledCount = called.length;
 
-    // ── 2. UPDATE TOP UI BAR ──
+        // ── Update Top UI Bar ──
     if (document.getElementById('gameId')) document.getElementById('gameId').textContent = roundData.number ? `R${roundData.number}` : 'R0';
     if (document.getElementById('playersVal')) document.getElementById('playersVal').textContent = roundData.players || 0;
     if (document.getElementById('callVal')) document.getElementById('callVal').textContent = called.length;
@@ -130,9 +130,20 @@ async function refreshGame() {
     if (document.getElementById('statusText')) document.getElementById('statusText').textContent = roundData.status === 'active' ? 'Game Active!' : 'Waiting for players...';
     if (document.getElementById('countdown')) document.getElementById('countdown').textContent = roundData.status === 'active' ? 'LIVE' : 'WAITING';
 
+    // ✅ REPLACE PLAYERS LIST WITH 4 LATEST CALLS
     if (document.getElementById('playersListText')) {
-        const pList = roundData.players_list || [];
-        document.getElementById('playersListText').textContent = `Players: ${pList.join(', ') || 'None'}`;
+        const last4 = called.slice(-4); // Get last 4 numbers
+
+        function getBingoLetter(num) {
+            if (num <= 15) return 'B';
+            if (num <= 30) return 'I';
+            if (num <= 45) return 'N';
+            if (num <= 60) return 'G';
+            return 'O';
+        }
+
+        const last4Text = last4.map(n => `${getBingoLetter(n)}-${n}`).join('  ');
+        document.getElementById('playersListText').textContent = last4.length > 0 ? `Last Calls: ${last4Text}` : 'Last Calls: None';
     }
 
     // ── 3. RENDER 1-75 BOARD ──
