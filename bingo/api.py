@@ -1,7 +1,7 @@
 import json
 import traceback
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -11,7 +11,8 @@ from django.conf import settings
 
 from .models import (
     TelegramUser, Cartela, GameRoom, GameRound,
-    Transaction, DepositRequest, WithdrawalRequest
+    Transaction, DepositRequest, WithdrawalRequest,
+    PlayerCartela  # ✅ Imported the relational model
 )
 from .game_logic import draw_number, detect_line, line_numbers, find_winners, generate_cartelas
 from .webapp_auth import webapp_auth_required
@@ -86,16 +87,14 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
-    # ✅ FIX 1: Ensure exactly 200 cartelas exist in the DB
+    # ✅ Ensure exactly 200 cartelas exist in the DB
     cartela_count = Cartela.objects.count()
     if cartela_count > 200:
-        # Delete extra cartelas to keep exactly 200
         ids_to_keep = list(Cartela.objects.order_by('cartela_number').values_list('id', flat=True)[:200])
         Cartela.objects.exclude(id__in=ids_to_keep).delete()
     elif cartela_count < 200:
         generate_cartelas(200)
 
-    # ✅ Fetch exactly 200
     cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number')[:200])
 
     round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
@@ -112,14 +111,15 @@ def list_cartelas(request):
         round_obj.start_at = timezone.now() + timedelta(seconds=60)
         round_obj.save()
 
-    current_players = round_obj.players if isinstance(round_obj.players, list) else []
-    sold_numbers = [p['cartela_number'] for p in current_players]
+    # ✅ Query via PlayerCartela
+    current_players = PlayerCartela.objects.filter(round=round_obj).select_related('cartela', 'user')
+    sold_numbers = {p.cartela.cartela_number for p in current_players}
 
     cartelas_data = []
     for c in cartelas:
         is_sold = c['cartela_number'] in sold_numbers
         is_mine = any(
-            p['cartela_number'] == c['cartela_number'] and p['player_id'] == request.tg_user.telegram_id
+            p.user.telegram_id == request.tg_user.telegram_id and p.cartela.cartela_number == c['cartela_number']
             for p in current_players
         )
         cartelas_data.append({
@@ -149,8 +149,6 @@ def toggle_cartela(request):
 
         room = _get_room()
         user = request.tg_user
-
-        # ✅ FIX 2: Safely convert stake to Decimal for math operations
         stake_amount = Decimal(str(room.stake))
 
         with transaction.atomic():
@@ -164,17 +162,11 @@ def toggle_cartela(request):
             except Cartela.DoesNotExist:
                 return _json({'ok': False, 'error': 'Cartela not found.'}, 404)
 
-            current_players = round_obj.players if isinstance(round_obj.players, list) else []
-            existing_player = next((p for p in current_players if
-                                    p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number),
-                                   None)
+            # ✅ Use PlayerCartela relation
+            existing = PlayerCartela.objects.filter(round=round_obj, user=user, cartela=c).first()
 
-            if existing_player:
-                # Release Cartela
-                current_players = [p for p in current_players if
-                                   not (p['player_id'] == user.telegram_id and p['cartela_number'] == c.cartela_number)]
-                round_obj.players = current_players
-
+            if existing:
+                existing.delete()
                 c.is_sold = False
                 c.save()
 
@@ -183,18 +175,15 @@ def toggle_cartela(request):
                 Transaction.objects.create(user=user, amount=stake_amount, type='refund',
                                            note=f"Released Cartela #{c.cartela_number}")
 
-                try:
-                    if hasattr(round_obj, 'recalculate_pool'):
+                if hasattr(round_obj, 'recalculate_pool'):
+                    try:
                         round_obj.recalculate_pool()
-                except Exception as e:
-                    print(f"⚠️ recalculate_pool error: {e}")
+                    except:
+                        pass
 
-                round_obj.save()
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
-
             else:
-                # Buy Cartela
-                if any(p['cartela_number'] == c.cartela_number for p in current_players):
+                if PlayerCartela.objects.filter(round=round_obj, cartela=c).exists():
                     return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
 
                 if user.balance < stake_amount:
@@ -203,26 +192,20 @@ def toggle_cartela(request):
                 c.is_sold = True
                 c.save()
 
-                new_player = {
-                    'player_id': user.telegram_id,
-                    'cartela_number': c.cartela_number,
-                    'numbers': c.numbers,
-                    'marked_numbers': [],
-                    'line_numbers': []
-                }
-
-                round_obj.players = current_players + [new_player]
+                PlayerCartela.objects.create(
+                    round=round_obj, user=user, cartela=c, marked_numbers=[]
+                )
 
                 user.balance -= stake_amount
                 user.save()
                 Transaction.objects.create(user=user, amount=-stake_amount, type='buy_cartela',
                                            note=f"Bought Cartela #{c.cartela_number}")
 
-                try:
-                    if hasattr(round_obj, 'recalculate_pool'):
+                if hasattr(round_obj, 'recalculate_pool'):
+                    try:
                         round_obj.recalculate_pool()
-                except Exception as e:
-                    print(f"⚠️ recalculate_pool error: {e}")
+                    except:
+                        pass
 
                 if not round_obj.start_at:
                     round_obj.start_at = timezone.now() + timedelta(seconds=60)
@@ -231,7 +214,7 @@ def toggle_cartela(request):
                 return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
 
     except Exception as e:
-        traceback.print_exc()  # Prints exact error to Render logs
+        traceback.print_exc()
         return _json({'ok': False, 'error': f"Python Crash: {str(e)}"}, 500)
 
 
@@ -251,9 +234,8 @@ def game_state(request):
 
     waiting = GameRound.objects.filter(room=room, status='waiting').first()
     if waiting and waiting.start_at and timezone.now() >= waiting.start_at:
-        current_players = waiting.players if isinstance(waiting.players, list) else []
-        unique_players = len(set(p['player_id'] for p in current_players))
-
+        # ✅ Count unique users via PlayerCartela
+        unique_players = PlayerCartela.objects.filter(round=waiting).values('user').distinct().count()
         if unique_players >= 2:
             waiting.status = 'active'
             waiting.started_at = timezone.now()
@@ -270,50 +252,46 @@ def game_state(request):
         recent_finished = GameRound.objects.filter(
             room=room, status='finished', finished_at__gte=timezone.now() - timedelta(seconds=60)
         ).order_by('-id').first()
-        if recent_finished:
-            round_obj = recent_finished
-        else:
-            round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
+        round_obj = recent_finished or GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
 
-    my_cartelas = []
-    winners_info = []
-    players_list = []
+    my_cartelas, winners_info, players_list = [], [], []
+    current_players = []
+    unique_user_ids = set()
 
     if round_obj:
-        current_players = round_obj.players if isinstance(round_obj.players, list) else []
+        # ✅ Query via PlayerCartela
+        current_players = PlayerCartela.objects.filter(round=round_obj).select_related('user', 'cartela')
+        unique_user_ids = {p.user.telegram_id for p in current_players}
 
-        unique_players = set(p['player_id'] for p in current_players)
-        users = TelegramUser.objects.filter(telegram_id__in=unique_players)
-        user_map = {u.telegram_id: (u.nickname or u.first_name) for u in users}
-        players_list = list(user_map.values())
+        users = TelegramUser.objects.filter(telegram_id__in=unique_user_ids)
+        players_list = [(u.nickname or u.first_name) for u in users]
 
+        called = set(round_obj.called_numbers or [])
         for p in current_players:
-            if p['player_id'] == request.tg_user.telegram_id:
-                marked = set(p.get('marked_numbers', []))
-                called = set(round_obj.called_numbers or [])
-                line = detect_line(p['numbers'], marked & called)
+            if p.user.telegram_id == request.tg_user.telegram_id:
+                marked = set(p.marked_numbers or [])
+                line = detect_line(p.cartela.numbers, marked & called)
                 my_cartelas.append({
-                    'player_id': p['cartela_number'],
-                    'cartela_number': p['cartela_number'],
-                    'numbers': p['numbers'],
+                    'player_id': p.user.telegram_id,
+                    'cartela_number': p.cartela.cartela_number,
+                    'numbers': p.cartela.numbers,
                     'marked': list(marked),
                     'line': line,
-                    'line_numbers': list(line_numbers(p['numbers'], line)) if line else [],
+                    'line_numbers': list(line_numbers(p.cartela.numbers, line)) if line else [],
                 })
 
         if round_obj.status == 'finished':
-            all_wins = Transaction.objects.filter(type='win').select_related('user')
-            wins = [w for w in all_wins if w.note and f"Round #{round_obj.round_number}" in w.note]
-
+            wins = Transaction.objects.filter(type='win',
+                                              note__contains=f"Round #{round_obj.round_number}").select_related('user')
             for w in wins:
-                win_player = next((p for p in current_players if p['player_id'] == w.user.telegram_id), None)
-                if win_player:
+                wp = next((p for p in current_players if p.user.telegram_id == w.user.telegram_id), None)
+                if wp:
                     winners_info.append({
                         'name': w.user.nickname or w.user.first_name,
                         'amount': str(w.amount),
-                        'cartela_number': win_player['cartela_number'],
-                        'numbers': win_player['numbers'],
-                        'marked_numbers': win_player['marked_numbers']
+                        'cartela_number': wp.cartela.cartela_number,
+                        'numbers': wp.cartela.numbers,
+                        'marked_numbers': wp.marked_numbers,
                     })
 
     return _json({
@@ -322,13 +300,13 @@ def game_state(request):
             'number': round_obj.round_number if round_obj else None,
             'status': round_obj.status if round_obj else 'idle',
             'called_numbers': round_obj.called_numbers if round_obj else [],
-            'players': len(set(p['player_id'] for p in current_players)) if round_obj and round_obj.players else 0,
+            'players': len(unique_user_ids) if round_obj else 0,
             'players_list': players_list,
             'start_at': round_obj.start_at.isoformat() if round_obj and round_obj.start_at else None,
             'prize_pool': str(round_obj.prize_pool) if round_obj else '0.0',
         },
         'my_cartelas': my_cartelas,
-        'winners': winners_info
+        'winners': winners_info,
     })
 
 
@@ -336,6 +314,12 @@ def game_state(request):
 @webapp_auth_required
 @require_http_methods(["POST"])
 def toggle_mark(request, player_id):
+    try:
+        if int(player_id) != int(request.tg_user.telegram_id):
+            return _json({'ok': False, 'error': 'player_id_mismatch'}, 403)
+    except (TypeError, ValueError):
+        return _json({'ok': False, 'error': 'invalid_player_id'}, 400)
+
     body = json.loads(request.body or '{}')
     number = body.get('number')
 
@@ -344,37 +328,31 @@ def toggle_mark(request, player_id):
     if not round_obj:
         return _json({'ok': False, 'error': 'no_active_game'}, 400)
 
-    current_players = round_obj.players if isinstance(round_obj.players, list) else []
     called = set(round_obj.called_numbers or [])
-
     if number not in called:
         return _json({'ok': False, 'error': 'not_called_yet'}, 400)
 
+    # ✅ Update via PlayerCartela
+    my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
     updated = False
-    for p in current_players:
-        if p['player_id'] == request.tg_user.telegram_id:
-            flat_nums = [item for sublist in p['numbers'] for item in sublist]
-            if number in flat_nums:
-                marked = set(p.get('marked_numbers', []))
+    for pc in my_pcs:
+        flat = [n for row in pc.cartela.numbers for n in row]
+        if number not in flat:
+            continue
+        marked = set(pc.marked_numbers or [])
+        if number in marked:
+            continue
+        marked.add(number)
+        pc.marked_numbers = list(marked)
+        line = detect_line(pc.cartela.numbers, marked)
+        pc.line_numbers = list(line_numbers(pc.cartela.numbers, line)) if line else []
+        pc.save(update_fields=['marked_numbers', 'line_numbers'])
+        updated = True
 
-                if number not in marked:
-                    marked.add(number)
-                    p['marked_numbers'] = list(marked)
+    if not updated:
+        return _json({'ok': False, 'error': 'already_marked_or_not_found'}, 400)
 
-                    line = detect_line(p['numbers'], marked)
-                    if line:
-                        p['line_numbers'] = list(line_numbers(p['numbers'], line))
-                    else:
-                        p['line_numbers'] = []
-
-                    updated = True
-
-    if updated:
-        round_obj.players = current_players
-        round_obj.save(update_fields=['players'])
-        return _json({'ok': True})
-
-    return _json({'ok': False, 'error': 'already_marked_or_not_found'}, 400)
+    return _json({'ok': True})
 
 
 @csrf_exempt
@@ -387,23 +365,18 @@ def claim_bingo(request):
         if not round_obj:
             return _json({'ok': False, 'error': 'No active game right now.'}, 400)
 
-        current_players = round_obj.players if isinstance(round_obj.players, list) else []
-        my_players = [p for p in current_players if p['player_id'] == request.tg_user.telegram_id]
-
-        if not my_players:
+        my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
+        if not my_pcs.exists():
             return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
-        has_valid_bingo = False
-        for p in my_players:
-            valid = set(p.get('marked_numbers', [])) & set(round_obj.called_numbers or [])
-            line = detect_line(p['numbers'], valid)
-            if line:
-                has_valid_bingo = True
-                break
+        called = set(round_obj.called_numbers or [])
+        has_valid_bingo = any(
+            detect_line(pc.cartela.numbers, set(pc.marked_numbers) & called)
+            for pc in my_pcs
+        )
 
         if not has_valid_bingo:
-            round_obj.players = [p for p in current_players if p['player_id'] != request.tg_user.telegram_id]
-            round_obj.save(update_fields=['players'])
+            my_pcs.delete()
             return _json({
                 'ok': False,
                 'error': 'FALSE_BINGO',
@@ -415,7 +388,7 @@ def claim_bingo(request):
         round_obj.save()
 
         winners = find_winners(round_obj)
-        payouts = _settle_round(round_obj, winners)
+        payouts = _settle_round(round_obj, winners) if winners else {}
         _schedule_next_round(room)
 
     return _json({'ok': True, 'payouts': payouts})
@@ -433,24 +406,17 @@ def scores(request):
 @webapp_auth_required
 def history(request):
     u = request.tg_user
-    all_rounds = GameRound.objects.order_by('-id')[:100]
-    my_rounds = []
-    for r in all_rounds:
-        players = r.players if isinstance(r.players, list) else []
-        if any(p['player_id'] == u.telegram_id for p in players):
-            my_rounds.append(r)
+    my_participations = PlayerCartela.objects.filter(user=u).select_related('round', 'cartela').order_by('-round__id')[
+        :50]
 
     data = []
-    for r in my_rounds[:50]:
-        all_wins = Transaction.objects.filter(type='win').select_related('user')
-        round_wins = [w for w in all_wins if w.note and f"Round #{r.round_number}" in w.note]
-        winners_list = [f"🏆 {w.user.nickname or w.user.first_name} (+{w.amount} birr)" for w in round_wins]
-
-        players = r.players if isinstance(r.players, list) else []
-        my_cartelas = [p['cartela_number'] for p in players if p['player_id'] == u.telegram_id]
+    for p in my_participations:
+        r = p.round
+        wins = Transaction.objects.filter(type='win', note__contains=f"Round #{r.round_number}").select_related('user')
+        winners_list = [f"🏆 {w.user.nickname or w.user.first_name} (+{w.amount} birr)" for w in wins]
 
         data.append({
-            'cartela_number': my_cartelas[0] if my_cartelas else 'N/A',
+            'cartela_number': p.cartela.cartela_number,
             'round_number': r.round_number,
             'round_status': r.status,
             'prize_pool': str(r.prize_pool),
@@ -470,32 +436,6 @@ def wallet(request):
             {'amount': str(t.amount), 'type': t.type, 'note': t.note, 'date': t.created_at.strftime('%Y-%m-%d %H:%M')}
             for t in tx],
     })
-
-
-@csrf_exempt
-@webapp_auth_required
-@require_http_methods(["POST"])
-def redeem_coupon(request):
-    body = json.loads(request.body or '{}')
-    code = (body.get('code') or '').strip().upper()
-    if not code: return _json({'ok': False, 'error': 'missing_code'}, 400)
-    with transaction.atomic():
-        try:
-            coupon = Coupon.objects.select_for_update().get(code=code)
-        except Coupon.DoesNotExist:
-            return _json({'ok': False, 'error': 'invalid_coupon'}, 400)
-        if coupon.is_used:
-            return _json({'ok': False, 'error': 'coupon_used'}, 400)
-
-        coupon.is_used = True
-        coupon.used_by = request.tg_user
-        coupon.used_at = timezone.now()
-        coupon.save()
-
-        request.tg_user.balance += coupon.value
-        request.tg_user.save()
-        Transaction.objects.create(user=request.tg_user, amount=coupon.value, type='coupon', note=f'Redeemed {code}')
-    return _json({'ok': True, 'new_balance': str(request.tg_user.balance)})
 
 
 @csrf_exempt
@@ -658,8 +598,8 @@ def admin_force_start(request):
 def _tick_room(room):
     waiting = GameRound.objects.filter(room=room, status='waiting').first()
     if waiting and waiting.start_at and timezone.now() >= waiting.start_at:
-        current_players = waiting.players if isinstance(waiting.players, list) else []
-        unique_players = len(set(p['player_id'] for p in current_players))
+        # ✅ Count unique users via PlayerCartela
+        unique_players = PlayerCartela.objects.filter(round=waiting).values('user').distinct().count()
 
         if unique_players >= 2:
             waiting.status = 'active'
@@ -691,24 +631,25 @@ def _tick_room(room):
 
 def _settle_round(round_obj, winners):
     pool = round_obj.prize_pool
-    ordered = sorted(winners, key=lambda x: x[0]['cartela_number'])
+    ordered = sorted(winners, key=lambda x: x[0].cartela.cartela_number)
     payouts = {}
 
     if len(ordered) == 1:
-        p = ordered[0][0]
-        user = TelegramUser.objects.get(telegram_id=p['player_id'])
+        pc = ordered[0][0]
+        user = pc.user
         user.balance += pool
         user.total_earned += pool
         user.save()
-        payouts[p['player_id']] = str(pool)
+        payouts[user.telegram_id] = str(pool)
         Transaction.objects.create(user=user, amount=pool, type='win', note=f"Round #{round_obj.round_number} winner")
     elif len(ordered) >= 2:
-        for p, amount in [(ordered[0][0], pool * Decimal('0.60')), (ordered[1][0], pool * Decimal('0.40'))]:
-            user = TelegramUser.objects.get(telegram_id=p['player_id'])
+        for pc, amount in [(ordered[0][0], pool * Decimal('0.60')), (ordered[1][0], pool * Decimal('0.40'))]:
+            user = pc.user
             user.balance += amount
             user.total_earned += amount
             user.save()
-            payouts[p['player_id']] = str(amount)
+            prev = Decimal(payouts.get(user.telegram_id, '0'))
+            payouts[user.telegram_id] = str(prev + amount)
             Transaction.objects.create(user=user, amount=amount, type='win',
                                        note=f"Round #{round_obj.round_number} split")
     return payouts
