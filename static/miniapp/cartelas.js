@@ -7,13 +7,13 @@ let cartelas = [], stake = 0, balance = 0, myCount = 0;
 let timerInterval = null;
 let syncInterval = null;
 
-// ✅ FIXED: Corrected the Authorization header
+// ✅ Correct Authorization header
 async function api(path, opts = {}) {
     const initData = window.Telegram?.WebApp?.initData || '';
-    const headers = { 
-        'Content-Type': 'application/json', 
-        'Authorization': `TgWebApp ${initData}`, 
-        ...(opts.headers || {}) 
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `TgWebApp ${initData}`,
+        ...(opts.headers || {})
     };
     try {
         const res = await fetch(path, { ...opts, headers });
@@ -63,7 +63,7 @@ async function loadCartelas(isBackgroundSync = false) {
 
     // 🎨 Render or Sync Grid
     const grid = document.getElementById('cartelaGrid');
-    
+
     if (!isBackgroundSync) {
         // Initial full render
         grid.innerHTML = cartelas.map(c => {
@@ -81,7 +81,7 @@ async function loadCartelas(isBackgroundSync = false) {
         cartelas.forEach(c => {
             const el = document.querySelector(`.cg-item[data-id="${c.id}"]`);
             if (!el) return;
-            
+
             const isMineNow = el.classList.contains('mine');
             const isSoldNow = el.classList.contains('sold');
 
@@ -97,20 +97,14 @@ async function loadCartelas(isBackgroundSync = false) {
 }
 
 async function handleCartelaClick(id, element) {
-    alert("1. Click detected! Cartela ID: " + id); // 👈 Debug Alert
-
     const c = cartelas.find(x => x.id === id);
-    if (!c) {
-        alert("2. Error: Cartela not found in local array.");
-        return;
-    }
+    if (!c) return;
 
     // 1. IF SOLD TO SOMEONE ELSE, BLOCK
     if (c.sold && !c.mine) {
         tg?.showAlert("❌ This cartela is already sold. Please choose another one.");
         return;
     }
-    alert("3. Cartela is available. Sending request..."); // 👈 Debug Alert
 
     // 2. ⚡ INSTANT OPTIMISTIC UI (No lag)
     const isBuying = !c.mine;
@@ -138,12 +132,11 @@ async function handleCartelaClick(id, element) {
         c.sold = !isBuying;
         tg?.showAlert("❌ Server Error: " + (r.error || 'Cartela purchase failed.'));
     } else {
-        alert("4. Server Success! Balance: " + r.balance); // 👈 Debug Alert
         // Update balance instantly
         balance = parseFloat(r.balance);
         document.getElementById('mainWallet').textContent = balance.toFixed(0);
         document.getElementById('playWallet').textContent = balance.toFixed(0);
-        
+
         myCount = cartelas.filter(x => x.mine).length;
         const playContainer = document.getElementById('playBtnContainer');
         if (myCount > 0) {
@@ -167,8 +160,8 @@ function startCountdown(targetTime) {
         if (remain <= 0) {
             clearInterval(timerInterval);
             timerEl.textContent = '0 s';
-            
-            // ⚡ When timer hits 0, check if the game started. 
+
+            // ⚡ When timer hits 0, check if the game started.
             // If not (only 1 player), the backend resets to 60s and the background sync will catch it.
             if (myCount > 0) {
                 window.location.href = '/app/game/';
@@ -182,7 +175,7 @@ function startCountdown(targetTime) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadCartelas(false);
-    
+
     // ⚡ Background Sync: Check for other players' purchases every 3 seconds
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => loadCartelas(true), 3000);
