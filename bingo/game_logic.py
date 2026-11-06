@@ -2,7 +2,7 @@ import random
 from .models import Cartela
 
 
-def generate_cartelas(count=400):
+def generate_cartelas(count=200):
     existing = set(Cartela.objects.values_list('cartela_number', flat=True))
     created = 0
     for i in range(1, count + 1):
