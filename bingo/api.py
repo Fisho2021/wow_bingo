@@ -9,7 +9,7 @@ from django.conf import settings
 
 from .models import (
     TelegramUser, Cartela, GameRoom, GameRound,
-    Transaction, DepositRequest, WithdrawalRequest, Coupon
+    Transaction, DepositRequest, WithdrawalRequest
 )
 from .game_logic import draw_number, detect_line, line_numbers, find_winners, generate_cartelas
 from .webapp_auth import webapp_auth_required
