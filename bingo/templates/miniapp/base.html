@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>Jofish Bingo</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <link rel="stylesheet" href="{% static 'miniapp/style.css' %}">
+</head>
+<body>
+    <div class="topbar">
+        <span class="brand">WOW Bingo</span>
+
+        <span style="font-size: 12px; color: #27ae60;">Win Big</span></div>
+
+    </div>
+
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+  <nav class="bottomnav" style="background: #151924; border-top: 1px solid #2a3143; padding-bottom: 5px;">
+    <a href="/app/" class="nav-item" style="color: #666;">
+        <span class="icon" style="font-size: 24px;">🎮</span><span style="font-size: 10px; font-weight: bold; margin-top: 4px;">GAME</span>
+    </a>
+    <a href="/app/scores/" class="nav-item" style="color: #666;">
+        <span class="icon" style="font-size: 24px;">🏆</span><span style="font-size: 10px; font-weight: bold; margin-top: 4px;">SCORES</span>
+    </a>
+    <a href="/app/history/" class="nav-item" style="color: #666;">
+        <span class="icon" style="font-size: 24px;">🕐</span><span style="font-size: 10px; font-weight: bold; margin-top: 4px;">HISTORY</span>
+    </a>
+    <a href="/app/wallet/" class="nav-item" style="color: #666;">
+        <span class="icon" style="font-size: 24px;">💼</span><span style="font-size: 10px; font-weight: bold; margin-top: 4px;">WALLET</span>
+    </a>
+    <a href="/app/profile/" class="nav-item" style="color: #666;">
+        <span class="icon" style="font-size: 24px;">👤</span><span style="font-size: 10px; font-weight: bold; margin-top: 4px;">PROFILE</span>
+    </a>
+</nav>
+
+    <script>window.ACTIVE_PAGE = "{{ active|default:'' }}";</script>
+    <script src="{% static 'miniapp/app.js' %}?v=10"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

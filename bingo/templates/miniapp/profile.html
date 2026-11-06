@@ -1,0 +1,68 @@
+{% extends "miniapp/base.html" %}
+{% block content %}
+
+<div style="text-align: center; padding: 20px;">
+    <div style="width: 80px; height: 80px; border: 3px solid #7a68ab; border-radius: 20px; margin: 0 auto; display: flex; align-items: center; justify-content: center; background: #151924;">
+        <span style="font-size: 40px; font-weight: bold; color: #fff;" id="avatarLetter">B</span>
+    </div>
+    <h2 style="color: white; margin: 15px 0 5px 0;" id="profileUsername">@username</h2>
+    <p style="color: #7a68ab; font-size: 12px; letter-spacing: 2px; margin: 0;">VERIFIED PLAYER</p>
+</div>
+
+<!-- NICKNAME UPDATE -->
+<div style="padding: 0 15px 15px 15px;">
+    <div style="background: #1e2230; border-radius: 12px; padding: 15px; display: flex; gap: 10px;">
+        <input type="text" id="nicknameInput" placeholder="Enter Nickname" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #2a3143; background: #0d111a; color: white;">
+        <button id="saveNicknameBtn" style="background: #7a68ab; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">Save</button>
+    </div>
+</div>
+
+<!-- WALLET GRID -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 15px;">
+    <div style="background: #1e2230; border-radius: 15px; padding: 20px; text-align: center;">
+        <div style="color: #a8a8b3; font-size: 11px; margin-bottom: 10px;">MAIN WALLET</div>
+        <div style="color: white; font-size: 24px; font-weight: bold;" id="walletMain">0 <span style="font-size: 12px; color: #27ae60;">ETB</span></div>
+        <div style="color: #27ae60; font-size: 11px; margin-top: 5px;">Withdrawable</div>
+    </div>
+    <div style="background: #1e2230; border-radius: 15px; padding: 20px; text-align: center;">
+        <div style="color: #a8a8b3; font-size: 11px; margin-bottom: 10px;">PLAY WALLET</div>
+        <div style="color: white; font-size: 24px; font-weight: bold;" id="walletPlay">0 <span style="font-size: 12px; color: #3498db;">ETB</span></div>
+        <div style="color: #3498db; font-size: 11px; margin-top: 5px;">Game Credits</div>
+    </div>
+</div>
+
+<!-- STATS GRID -->
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 15px;">
+    <div style="background: #1e2230; border-radius: 12px; padding: 15px 5px; text-align: center;">
+        <div style="color: #a8a8b3; font-size: 9px;">GAME WIN</div>
+        <div style="color: #ffd166; font-size: 18px; font-weight: bold; margin-top: 5px;" id="statWin">0</div>
+    </div>
+    <div style="background: #1e2230; border-radius: 12px; padding: 15px 5px; text-align: center;">
+        <div style="color: #a8a8b3; font-size: 9px;">TOTAL INVITE</div>
+        <div style="color: #3498db; font-size: 18px; font-weight: bold; margin-top: 5px;" id="statInvite">0</div>
+    </div>
+    <div style="background: #1e2230; border-radius: 12px; padding: 15px 5px; text-align: center;">
+        <div style="color: #a8a8b3; font-size: 9px;">TOTAL EARNED</div>
+        <div style="color: #27ae60; font-size: 18px; font-weight: bold; margin-top: 5px;" id="statEarned">0</div>
+    </div>
+</div>
+
+<!-- SETTINGS (SOUND TOGGLE) -->
+<div style="padding: 15px;">
+    <div style="background: #1e2230; border-radius: 15px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="background: #27ae60; padding: 10px; border-radius: 50%; font-size: 20px;" id="soundIcon">🔊</div>
+            <div>
+                <div style="color: white; font-weight: bold; font-size: 14px;">SOUND EFFECTS</div>
+                <div style="color: #a8a8b3; font-size: 12px;">Toggle game audio</div>
+            </div>
+        </div>
+        <!-- 👇 ACTUAL TOGGLE SWITCH -->
+        <div id="soundToggle" onclick="toggleSoundSetting()" style="width: 50px; height: 28px; background: #27ae60; border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s;">
+            <div id="soundToggleKnob" style="width: 22px; height: 22px; background: white; border-radius: 50%; position: absolute; top: 3px; right: 3px; transition: 0.3s;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/miniapp/profile.js?v=60"></script>
+{% endblock %}

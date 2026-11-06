@@ -1,0 +1,98 @@
+{% extends "miniapp/base.html" %}
+{% block content %}
+
+<!-- TOP INFO BAR -->
+<div class="top-info">
+    <div class="info-box"><div class="lbl">Game</div><div class="val" id="gameId">Y0</div></div>
+    <div class="info-box"><div class="lbl">Players</div><div class="val" id="playersVal">0</div></div>
+    <div class="info-box"><div class="lbl">Stake</div><div class="val" id="stakeVal">10</div></div>
+    <div class="info-box"><div class="lbl">Call</div><div class="val" id="callVal">0</div></div>
+    <div class="info-box" style="background: #ffd166; color: #2d2a3a;"><div class="lbl" style="color: #333;">Prize</div><div class="val" id="prizeVal">0</div></div>
+    <!-- 👇 ONLY ONE SOUND TOGGLE -->
+    <div class="info-box sound-box" onclick="toggleSound()">
+        <div class="lbl">Sound</div>
+        <div class="val" id="soundVal">🔊</div>
+    </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar" style="background: #5a4a8a; padding: 10px; display: flex; flex-direction: column; color: white; font-weight: bold; text-align: center;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+        <span id="statusText">Waiting…</span>
+        <span id="countdown" style="color: #ffd166;">—</span>
+    </div>
+    <div style="font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="playersListText">
+        Players: None
+    </div>
+</div>
+
+<!-- MAIN GAME AREA -->
+<div class="game-layout">
+    <div class="called-panel">
+        <div class="bingo-header">
+            <div class="bh bh-b">B</div><div class="bh bh-i">I</div>
+            <div class="bh bh-n">N</div><div class="bh bh-g">G</div><div class="bh bh-o">O</div>
+        </div>
+        <div class="ranges-row">
+            <div>1-15</div><div>16-30</div><div>31-45</div><div>46-60</div><div>61-75</div>
+        </div>
+        <div class="called-grid" id="calledGrid"></div>
+    </div>
+
+    <div class="cartela-panel">
+        <div class="current-call-box">
+            <div class="cc-label">Current Call</div>
+            <div class="cc-circle" id="currentCall">-</div>
+        </div>
+        <div id="myCartelasContainer"></div>
+    </div>
+</div>
+
+<button class="bingo-btn" id="bingoBtn">BINGO!</button>
+<div class="row-btns">
+    <button class="btn-blue" id="refreshBtn">⟳ Refresh</button>
+    <button class="btn-red" id="leaveBtn">⏻ Leave</button>
+</div>
+
+<!-- WINNER MODAL -->
+<div id="winnerModal" class="modal" style="display:none; background: rgba(0,0,0,0.9);">
+    <div class="modal-content" style="background: #0d111a; border: 2px solid #2a3143; border-radius: 25px; padding: 30px 20px; width: 100%; max-width: 350px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);">
+        <div style="font-size: 45px; margin-bottom: 5px; filter: drop-shadow(0 0 10px rgba(255,215,0,0.5));">👑</div>
+        <h2 style="color: #ffd166; font-size: 28px; font-weight: 900; margin-bottom: 10px; letter-spacing: 1px;">🎉 BINGO! 🎉</h2>
+
+        <p style="color: #ffffff; font-size: 18px; font-weight: bold; margin-bottom: 15px;">
+            <span id="winnerName">Player</span> Won!
+        </p>
+
+        <p style="color: #ffd166; font-size: 12px; letter-spacing: 2px; margin-bottom: 15px;">
+            CARTEL NO #<span id="winnerCartelaNum">000</span>
+        </p>
+
+        <div style="background: #1e2230; border-radius: 15px; padding: 10px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 5px;">
+                <div style="background: #3498db; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">B</div>
+                <div style="background: #9b59b6; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">I</div>
+                <div style="background: #9b59b6; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">N</div>
+                <div style="background: #2ecc71; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">G</div>
+                <div style="background: #e67e22; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">O</div>
+            </div>
+
+            <div id="winnerGridContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;"></div>
+        </div>
+
+        <p style="color: #a8a8b3; font-size: 11px; letter-spacing: 1px; margin-bottom: 8px;">
+            STARTING IN <span id="modalCountdown" style="color: #e67e22; font-weight: bold;">5S</span>
+        </p>
+
+        <div style="width: 100%; height: 6px; background: #2a3143; border-radius: 3px; overflow: hidden; margin-bottom: 20px;">
+            <div id="modalProgressBar" style="width: 100%; height: 100%; background: #e67e22; transition: width 1s linear;"></div>
+        </div>
+
+        <button class="modal-btn" onclick="window.location.href='/app/cartelas/'" style="background: #e67e22; color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 900; font-size: 16px; cursor: pointer;">
+            PLAY NEXT GAME
+        </button>
+    </div>
+</div>
+
+<script src="/static/miniapp/game.js?v=125"></script>
+{% endblock %}

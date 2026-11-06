@@ -1,0 +1,41 @@
+{% extends "miniapp/base.html" %}
+{% block content %}
+
+<!-- TOP BAR -->
+<div class="top-nav-bar">
+    <button class="nav-btn" onclick="window.location.href='/app/'">⬅ Back</button>
+    <button class="nav-btn" id="refreshBtn">⟳ Refresh</button>
+</div>
+
+<!-- WALLET & TIMER INFO -->
+<div class="wallet-info-bar">
+    <div class="w-box">
+        <div class="w-lbl">MAIN WALLET</div>
+        <div class="w-val" id="mainWallet">0</div>
+    </div>
+    <div class="w-box">
+        <div class="w-lbl">PLAY WALLET</div>
+        <div class="w-val" id="playWallet">0</div>
+    </div>
+    <div class="w-box">
+        <div class="w-lbl">STAKE</div>
+        <div class="w-val" id="stakeVal">10</div>
+    </div>
+    <div class="w-box" style="background: #ffd166;">
+        <div class="w-lbl" style="color: #333;">TIMER</div>
+        <div class="w-val" id="timerVal" style="color: #333;">0 s</div>
+    </div>
+</div>
+
+<!-- CARTELA GRID -->
+<div class="cartela-grid" id="cartelaGrid"></div>
+
+<!-- FLOATING BOTTOM PLAY BUTTON -->
+<div id="playBtnContainer" style="position: fixed; bottom: 60px; left: 0; right: 0; padding: 10px 15px; background: #0d111a; display: none; z-index: 100;">
+    <button id="playGameBtn" style="width: 100%; padding: 15px; background: #27ae60; color: white; font-weight: 900; font-size: 18px; border-radius: 12px; border: none; cursor: pointer;">
+        🎮 Play Game (<span id="myCartelaCount">0</span> Selected)
+    </button>
+</div>
+
+<script src="/static/miniapp/cartelas.js?v=125"></script>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "miniapp/base.html" %}
+{% block content %}
+
+<!-- DASHBOARD TOP -->
+<div style="text-align: center; margin-top: 40px;">
+    <h3 style="color: #a8a8b3; font-weight: normal; margin-bottom: 5px;">Welcome to</h3>
+    <h1 style="color: #ffd166; font-size: 32px; font-weight: 900; letter-spacing: 2px; margin-bottom: 30px;">WOW BINGO</h1>
+
+    <div style="background: #1e2230; border-radius: 20px; padding: 30px 20px; margin: 0 15px;">
+        <p style="color: #fff; font-size: 12px; letter-spacing: 2px; font-weight: bold; margin-bottom: 20px;">CHOOSE YOUR STAKE</p>
+        <div style="width: 50px; height: 2px; background: #ffd166; margin: 0 auto 20px auto;"></div>
+
+        <div onclick="window.location.href='/app/cartelas/'" style="background: #27ae60; border-radius: 12px; padding: 20px; cursor: pointer; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);">
+            <h2 style="color: white; margin: 0; font-size: 24px;">▶ PLAY 10</h2>
+        </div>
+
+        <p style="color: #a8a8b3; font-size: 12px; letter-spacing: 1px; margin-top: 30px; margin-bottom: 10px;">WALLET BALANCE</p>
+        <h2 style="color: white; font-size: 28px; margin: 0;" id="dashBalance">0</h2>
+    </div>
+</div>
+
+<!-- 👇 ADMIN PANEL (Only visible to Admin) -->
+<div id="adminPanel" class="dashboard-top" style="display: none; margin-top: 15px;">
+    <div class="dash-box" style="background: #e74c3c; color: white; border: 2px solid #c0392b; padding: 15px; border-radius: 12px; text-align: center; margin: 0 15px;">
+        <div class="dash-label" style="color: #ffb3b3; font-size: 12px; font-weight: bold;">👑 Admin Platform Profit (20%)</div>
+        <div class="dash-value" id="dashPlatformBalance" style="color: white; font-size: 22px; font-weight: bold; margin-top: 5px;">0.00</div>
+    </div>
+</div>
+
+<!-- 👇 ADMIN CONTROL BUTTON (Only visible to Admin) -->
+<div id="adminControlBtn" style="display: none; margin: 15px;">
+    <div onclick="window.location.href='/app/admin/'" style="background: #e74c3c; border-radius: 12px; padding: 15px; text-align: center; cursor: pointer; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.4);">
+        <div style="font-size: 20px; margin-bottom: 5px;">👑</div>
+        <div style="color: white; font-weight: bold; font-size: 14px;">Admin Management Control</div>
+    </div>
+</div>
+
+<!-- MAIN MENU GRID -->
+<div class="menu-grid">
+    <div class="menu-btn" onclick="tg?.showAlert('Contact support: @bu191919')">
+        <div class="text">Contact Support...</div>
+    </div>
+
+    <div class="menu-btn" onclick="showInstructions()">
+        <div class="text">Game Instruction 📖</div>
+    </div>
+
+    <div class="menu-btn full-width" onclick="openModal('referralModal')">
+        <div class="text">Invite 🔗</div>
+    </div>
+</div>
+
+<!-- 🟢 MODALS -->
+<!-- Referral Modal -->
+<div id="referralModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('referralModal')">&times;</span>
+        <h3>Invite & Earn</h3>
+        <p>Get 5 ETB per friend!</p>
+        <input type="text" id="refLink" readonly>
+        <button onclick="copyRefLink()" class="modal-btn" style="background: #27ae60; margin-bottom: 10px;">Copy Link</button>
+        <div id="refList" class="ref-list"></div>
+    </div>
+</div>
+
+<script src="/static/miniapp/menu.js?v=115"></script>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "miniapp/base.html" %}
+{% block content %}
+
+<div style="padding: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="color: #ffd166; margin: 0;">👑 Admin Control</h2>
+        <button onclick="window.location.href='/app/'" style="background: #2a3143; color: white; border: none; padding: 8px 12px; border-radius: 8px;">Back</button>
+    </div>
+
+    <!-- STATS DASHBOARD -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+        <div style="background: #1e2230; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #27ae60;">
+            <div style="color: #a8a8b3; font-size: 11px; margin-bottom: 5px;">TOTAL PROFIT (20%)</div>
+            <div style="color: #27ae60; font-size: 22px; font-weight: 900;" id="statProfit">0.00 ETB</div>
+        </div>
+        <div style="background: #1e2230; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #3498db;">
+            <div style="color: #a8a8b3; font-size: 11px; margin-bottom: 5px;">TOTAL USERS</div>
+            <div style="color: #3498db; font-size: 22px; font-weight: 900;" id="statUsers">0</div>
+        </div>
+    </div>
+
+    <!-- GAME CONTROL -->
+    <div style="background: #1e2230; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+        <h3 style="color: white; margin-top: 0; font-size: 16px;">🎮 Game Control</h3>
+        <button onclick="forceStartGame()" style="width: 100%; background: #e67e22; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+            ⚡ Force Start Current Game
+        </button>
+    </div>
+
+    <!-- PENDING REQUESTS -->
+    <h3 style="color: white; margin-top: 0; font-size: 16px;">Pending Requests</h3>
+    <div id="requestsList" style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="color: #a8a8b3; text-align: center;">Loading...</div>
+    </div>
+</div>
+
+<script src="/static/miniapp/admin.js?v=1"></script>
+{% endblock %}
