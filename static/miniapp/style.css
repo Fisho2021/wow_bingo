@@ -1074,3 +1074,14 @@ body {
     border: none;
     cursor: not-allowed;
 }
+/* Center Free Star */
+.my-cartela-grid .cell.star {
+    background: #2ecc71 !important; /* Green */
+    color: #ffd166; /* Gold/Yellow Star */
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+}

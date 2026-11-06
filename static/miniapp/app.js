@@ -7,7 +7,7 @@ if (tg) {
     tg.setHeaderColor('#2d2a3a');
 }
 
-// ═══ SOUND ═══
+// ═══ SOUND & VOICE ═══
 let soundOn = true;
 let audioCtx = null;
 
@@ -39,12 +39,35 @@ function playBingoSound() {
     setTimeout(() => beep(1100, 0.3), 300);
 }
 
+function speakAmharic(number) {
+    if (!soundOn || !window.speechSynthesis) return;
+
+    const amharicNumbers = {
+        1:"አንድ",2:"ሁለት",3:"ሶስት",4:"አራት",5:"አምስት",6:"ስድስት",7:"ሰባት",8:"ስምንት",9:"ዘጠኝ",10:"አስር",
+        11:"አስራ አንድ",12:"አስራ ሁለት",13:"አስራ ሶስት",14:"አስራ አራት",15:"አስራ አምስት",16:"አስራ ስድስት",17:"አስራ ሰባት",18:"አስራ ስምንት",19:"አስራ ዘጠኝ",20:"ሃያ",
+        21:"ሃያ አንድ",22:"ሃያ ሁለት",23:"ሃያ ሶስት",24:"ሃያ አራት",25:"ሃያ አምስት",26:"ሃያ ስድስት",27:"ሃያ ሰባት",28:"ሃያ ስምንት",29:"ሃያ ዘጠኝ",30:"ሰላሳ",
+        31:"ሰላሳ አንድ",32:"ሰላሳ ሁለት",33:"ሰላሳ ሶስት",34:"ሰላሳ አራት",35:"ሰላሳ አምስት",36:"ሰላሳ ስድስት",37:"ሰላሳ ሰባት",38:"ሰላሳ ስምንት",39:"ሰላሳ ዘጠኝ",40:"አርባ",
+        41:"አርባ አንድ",42:"አርባ ሁለት",43:"አርባ ሶስት",44:"አርባ አራት",45:"አርባ አምስት",46:"አርባ ስድስት",47:"አርባ ሰባት",48:"አርባ ስምንት",49:"አርባ ዘጠኝ",50:"ሃምሳ",
+        51:"ሃምሳ አንድ",52:"ሃምሳ ሁለት",53:"ሃምሳ ሶስት",54:"ሃምሳ አራት",55:"ሃምሳ አምስት",56:"ሃምሳ ስድስት",57:"ሃምሳ ሰባት",58:"ሃምሳ ስምንት",59:"ሃምሳ ዘጠኝ",60:"ስድሳ",
+        61:"ስድሳ አንድ",62:"ስድሳ ሁለት",63:"ስድሳ ሶስት",64:"ስድሳ አራት",65:"ስድሳ አምስት",66:"ስድሳ ስድስት",67:"ስድሳ ሰባት",68:"ስድሳ ስምንት",69:"ስድሳ ዘጠኝ",70:"ሰባ",
+        71:"ሰባ አንድ",72:"ሰባ ሁለት",73:"ሰባ ሶስት",74:"ሰባ አራት",75:"ሰባ አምስት"
+    };
+
+    const text = amharicNumbers[number];
+    if (!text) return;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'am-ET';
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+}
+
 // ═══ API WRAPPER ═══
 async function api(path, opts = {}) {
     const initData = window.Telegram?.WebApp?.initData || '';
     const headers = {
         'Content-Type': 'application/json',
-        'Authorization': `TgWebApp ${initData}`, // ✅ Correct Auth Header
+        'Authorization': `TgWebApp ${initData}`,
         ...(opts.headers || {}),
     };
     try {
@@ -78,7 +101,6 @@ let _lastCalledCount = 0;
 async function loadGame() {
     await refreshGame();
     if (pollTimer) clearInterval(pollTimer);
-    // Poll every 2 seconds for faster number updates
     pollTimer = setInterval(refreshGame, 2000);
 }
 
@@ -89,8 +111,13 @@ async function refreshGame() {
         return;
     }
 
+    // ✅ FIXED: Define the missing variables
+    const roundData = r.round || {};
+    const called = roundData.called_numbers || [];
+    const last = called.length > 0 ? called[called.length - 1] : null;
+
     // 🏆 1. CHECK FOR WINNER MODAL
-    if (r.round.status === 'finished' && r.winners && r.winners.length > 0) {
+    if (roundData.status === 'finished' && r.winners && r.winners.length > 0) {
         if (pollTimer) clearInterval(pollTimer);
         const winner = r.winners[0];
 
@@ -111,29 +138,26 @@ async function refreshGame() {
         return;
     }
 
-    const roundData = r.round || {};
-    const called = roundData.called_numbers || [];
-    const last = called.length > 0 ? called[called.length - 1] : '-';
-
-    if (called.length > _lastCalledCount && _lastCalledCount > 0) {
+    // 🔊 Voice and Sound
+    if (called.length > _lastCalledCount && _lastCalledCount > 0 && last) {
         playCallSound();
+        speakAmharic(last);
         if (tg) tg.HapticFeedback.impactOccurred('light');
     }
     _lastCalledCount = called.length;
 
-        // ── Update Top UI Bar ──
+    // ── Update Top UI Bar ──
     if (document.getElementById('gameId')) document.getElementById('gameId').textContent = roundData.number ? `R${roundData.number}` : 'R0';
     if (document.getElementById('playersVal')) document.getElementById('playersVal').textContent = roundData.players || 0;
     if (document.getElementById('callVal')) document.getElementById('callVal').textContent = called.length;
     if (document.getElementById('prizeVal')) document.getElementById('prizeVal').textContent = roundData.prize_pool || '0';
-    if (document.getElementById('currentCall')) document.getElementById('currentCall').textContent = last;
+    if (document.getElementById('currentCall')) document.getElementById('currentCall').textContent = last || '-';
     if (document.getElementById('statusText')) document.getElementById('statusText').textContent = roundData.status === 'active' ? 'Game Active!' : 'Waiting for players...';
     if (document.getElementById('countdown')) document.getElementById('countdown').textContent = roundData.status === 'active' ? 'LIVE' : 'WAITING';
 
     // ✅ REPLACE PLAYERS LIST WITH 4 LATEST CALLS
     if (document.getElementById('playersListText')) {
-        const last4 = called.slice(-4); // Get last 4 numbers
-
+        const last4 = called.slice(-4);
         function getBingoLetter(num) {
             if (num <= 15) return 'B';
             if (num <= 30) return 'I';
@@ -141,7 +165,6 @@ async function refreshGame() {
             if (num <= 60) return 'G';
             return 'O';
         }
-
         const last4Text = last4.map(n => `${getBingoLetter(n)}-${n}`).join('  ');
         document.getElementById('playersListText').textContent = last4.length > 0 ? `Last Calls: ${last4Text}` : 'Last Calls: None';
     }
@@ -157,26 +180,27 @@ async function refreshGame() {
     // ── 4. RENDER MULTIPLE CARTELAS + BINGO BUTTONS ──
     const cartelasContainer = document.getElementById('myCartelasContainer');
     if (r.my_cartelas && r.my_cartelas.length > 0) {
-
-        // Loop through all cartelas the user owns
         cartelasContainer.innerHTML = r.my_cartelas.map(cartela => {
             const markedNums = cartela.marked || [];
             const flatNums = cartela.numbers.flat();
 
-            // Build the 25 cells
-            const cellsHtml = flatNums.map(n => {
+            // ✅ Render cells + Center Star Logic
+            const cellsHtml = flatNums.map((n, index) => {
+                // Check if this is the CENTER cell (index 12 in a 5x5 grid)
+                if (index === 12) {
+                    return `<div class="cell marked star">⭐</div>`;
+                }
+
                 const isMarked = markedNums.includes(n);
                 const isCalled = called.includes(n);
 
                 let cellClass = 'cell';
                 if (isMarked) cellClass += ' marked';
-                else if (isCalled) cellClass += ' called'; // Highlight called numbers in Yellow
+                else if (isCalled) cellClass += ' called';
 
-                // Tapping a number sends a request to mark it
                 return `<div class="${cellClass}" onclick="toggleMark(${cartela.player_id}, ${n})">${n}</div>`;
             }).join('');
 
-            // Return the card wrapper + 5x5 grid + individual BINGO button
             return `
             <div class="my-cartela-wrapper">
                 <div class="my-cartela-header">Cartela #${cartela.cartela_number}</div>
@@ -185,7 +209,6 @@ async function refreshGame() {
             </div>
             `;
         }).join('');
-
     } else if (cartelasContainer) {
         cartelasContainer.innerHTML = '<div class="loader" style="color:white; text-align:center;">No cartela bought.</div>';
     }
@@ -200,7 +223,7 @@ async function toggleMark(playerId, number) {
 
     if (r.ok) {
         if (tg) tg.HapticFeedback.impactOccurred('medium');
-        refreshGame(); // Reload UI immediately to show green mark
+        refreshGame();
     } else {
         if (r.error === 'not_called_yet') {
             if (tg) tg.showAlert('Wait for this number to be called!');
@@ -333,7 +356,6 @@ async function loadReferrals() {
 
 // ═══ INITIALIZATION ═══
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Determine which page we are on and load the correct data
     const path = window.location.pathname;
 
     if (path.includes('/app/game/')) {
@@ -346,18 +368,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadProfile();
     }
 
-    // 2. Attach Event Listeners
     document.getElementById('depositBtn')?.addEventListener('click', requestDeposit);
     document.getElementById('withdrawBtn')?.addEventListener('click', requestWithdrawal);
     document.getElementById('saveNicknameBtn')?.addEventListener('click', saveNickname);
 
-    // Global Refresh Button (for game or wallet)
     document.getElementById('refreshBtn')?.addEventListener('click', () => {
         if (path.includes('/app/game/')) refreshGame();
         if (path.includes('/app/wallet/')) loadWallet();
     });
 
-    // Referrals
     if (document.getElementById('refLink')) {
         await loadReferrals();
         document.getElementById('copyRefBtn')?.addEventListener('click', () => {

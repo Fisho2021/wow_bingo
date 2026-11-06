@@ -30,16 +30,41 @@ def draw_number(round_obj):
     return num
 
 
-def detect_line(grid, marked):
-    marked = set(marked)
-    marked.add(grid[2][2])
-    for r in range(5):
-        if all(grid[r][c] in marked for c in range(5)): return {'type': 'row', 'index': r}
-    for c in range(5):
-        if all(grid[r][c] in marked for r in range(5)): return {'type': 'col', 'index': c}
-    if all(grid[i][i] in marked for i in range(5)): return {'type': 'diag', 'which': 'main'}
-    if all(grid[i][4 - i] in marked for i in range(5)): return {'type': 'diag', 'which': 'anti'}
-    return None
+def detect_line(cartela_numbers, marked_numbers):
+    """
+    Checks for valid Bingo lines: Horizontal, Vertical, Diagonal, or 4 Corners.
+    The center cell is automatically considered marked.
+    """
+    # Ensure the center cell (index 12) is ALWAYS marked
+    center_number = cartela_numbers[2][2]
+    if center_number not in marked_numbers:
+        marked_numbers.add(center_number)
+
+    # 1. Check Rows
+    for row in cartela_numbers:
+        if all(num in marked_numbers for num in row):
+            return True
+
+    # 2. Check Columns
+    for col in range(5):
+        if all(cartela_numbers[row][col] in marked_numbers for row in range(5)):
+            return True
+
+    # 3. Check Diagonals
+    diag1 = [cartela_numbers[i][i] for i in range(5)]
+    diag2 = [cartela_numbers[i][4-i] for i in range(5)]
+    if all(num in marked_numbers for num in diag1) or all(num in marked_numbers for num in diag2):
+        return True
+
+    # 4. Check 4 Corners
+    corners = [
+        cartela_numbers[0][0], cartela_numbers[0][4],
+        cartela_numbers[4][0], cartela_numbers[4][4]
+    ]
+    if all(num in marked_numbers for num in corners):
+        return True
+
+    return False
 
 
 def line_numbers(grid, line):

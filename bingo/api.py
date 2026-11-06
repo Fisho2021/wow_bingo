@@ -648,10 +648,12 @@ def _tick_room(room):
 
 def _settle_round(round_obj, winners):
     pool = round_obj.prize_pool
+    # Sort winners so the first one gets the 60%
     ordered = sorted(winners, key=lambda x: x[0].cartela.cartela_number)
     payouts = {}
 
     if len(ordered) == 1:
+        # Only 1 winner: gets 100%
         pc = ordered[0][0]
         user = pc.user
         user.balance += pool
@@ -659,17 +661,36 @@ def _settle_round(round_obj, winners):
         user.save()
         payouts[user.telegram_id] = str(pool)
         Transaction.objects.create(user=user, amount=pool, type='win', note=f"Round #{round_obj.round_number} winner")
+
     elif len(ordered) >= 2:
-        for pc, amount in [(ordered[0][0], pool * Decimal('0.60')), (ordered[1][0], pool * Decimal('0.40'))]:
+        # 2+ winners: 60% to first, remaining 40% split among the rest
+        first_pc = ordered[0][0]
+        first_user = first_pc.user
+        first_share = pool * Decimal('0.60')
+
+        first_user.balance += first_share
+        first_user.total_earned += first_share
+        first_user.save()
+        payouts[first_user.telegram_id] = str(first_share)
+        Transaction.objects.create(user=first_user, amount=first_share, type='win',
+                                   note=f"Round #{round_obj.round_number} first winner (60%)")
+
+        # Distribute the 40%
+        remaining_winners = ordered[1:]
+        rest_pool = pool * Decimal('0.40')
+        rest_share = rest_pool / len(remaining_winners)
+
+        for pc in remaining_winners:
             user = pc.user
-            user.balance += amount
-            user.total_earned += amount
+            user.balance += rest_share
+            user.total_earned += rest_share
             user.save()
-            prev = Decimal(payouts.get(user.telegram_id, '0'))
-            payouts[user.telegram_id] = str(prev + amount)
-            Transaction.objects.create(user=user, amount=amount, type='win',
-                                       note=f"Round #{round_obj.round_number} split")
+            payouts[user.telegram_id] = str(rest_share)
+            Transaction.objects.create(user=user, amount=rest_share, type='win',
+                                       note=f"Round #{round_obj.round_number} split winner (40%)")
+
     return payouts
+
 
 
 def _schedule_next_round(room):
