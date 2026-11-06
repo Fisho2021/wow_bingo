@@ -97,14 +97,20 @@ async function loadCartelas(isBackgroundSync = false) {
 }
 
 async function handleCartelaClick(id, element) {
+    alert("1. Click detected! Cartela ID: " + id); // 👈 Debug Alert
+
     const c = cartelas.find(x => x.id === id);
-    if (!c) return;
+    if (!c) {
+        alert("2. Error: Cartela not found in local array.");
+        return;
+    }
 
     // 1. IF SOLD TO SOMEONE ELSE, BLOCK
     if (c.sold && !c.mine) {
         tg?.showAlert("❌ This cartela is already sold. Please choose another one.");
         return;
     }
+    alert("3. Cartela is available. Sending request..."); // 👈 Debug Alert
 
     // 2. ⚡ INSTANT OPTIMISTIC UI (No lag)
     const isBuying = !c.mine;
@@ -115,12 +121,12 @@ async function handleCartelaClick(id, element) {
     }
     c.mine = isBuying;
     c.sold = isBuying;
-    
+
     tg?.HapticFeedback?.impactOccurred('light');
 
     // 3. Send to backend
     const r = await api('/api/cartelas/toggle/', {
-        method: 'POST', 
+        method: 'POST',
         body: JSON.stringify({ cartela_id: id }),
     });
 
@@ -130,8 +136,9 @@ async function handleCartelaClick(id, element) {
         else element.className = 'cg-item mine';
         c.mine = !isBuying;
         c.sold = !isBuying;
-        tg?.showAlert(r.error || 'Cartela purchase failed.');
+        tg?.showAlert("❌ Server Error: " + (r.error || 'Cartela purchase failed.'));
     } else {
+        alert("4. Server Success! Balance: " + r.balance); // 👈 Debug Alert
         // Update balance instantly
         balance = parseFloat(r.balance);
         document.getElementById('mainWallet').textContent = balance.toFixed(0);
