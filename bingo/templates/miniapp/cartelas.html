@@ -28,14 +28,17 @@
 </div>
 
 <!-- CARTELA GRID -->
-<div class="cartela-grid" id="cartelaGrid"></div>
+<div class="cartela-grid" id="cartelaGrid">
+    <!-- JS will inject the 200 cartelas here -->
+</div>
 
 <!-- FLOATING BOTTOM PLAY BUTTON -->
-<div id="playBtnContainer" style="position: fixed; bottom: 60px; left: 0; right: 0; padding: 10px 15px; background: #0d111a; display: none; z-index: 100;">
-    <button id="playGameBtn" style="width: 100%; padding: 15px; background: #27ae60; color: white; font-weight: 900; font-size: 18px; border-radius: 12px; border: none; cursor: pointer;">
+<div id="playBtnContainer" style="position: fixed; bottom: 70px; left: 0; right: 0; padding: 10px 15px; background: linear-gradient(to top, #0d111a 50%, transparent); display: none; z-index: 100;">
+    <button id="playGameBtn" style="width: 100%; padding: 15px; background: #27ae60; color: white; font-weight: 900; font-size: 18px; border-radius: 12px; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);">
         🎮 Play Game (<span id="myCartelaCount">0</span> Selected)
     </button>
 </div>
 
-<script src="/static/miniapp/cartelas.js?v=125"></script>
+<!-- ✅ CRITICAL FIX: Bumped version to v=200 to clear Telegram's cache -->
+<script src="/static/miniapp/cartelas.js?v=200"></script>
 {% endblock %}

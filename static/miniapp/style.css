@@ -1,80 +1,613 @@
-/* ═══════════════════════════════════════════════
-   GLOBAL STYLES & THEME
-   ═══════════════════════════════════════════════ */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
 body {
     background-color: #0d111a; /* Deep dark theme */
     color: #fff;
-    min-height: 100vh;
-    padding-bottom: 70px; /* Space for bottom nav */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-
-/* ═══════════════════════════════════════════════
-   TOP INFO BAR & STATUS BAR (GAME SCREEN)
-   ═══════════════════════════════════════════════ */
-.top-info {
-    display: flex;
-    gap: 4px;
-    padding: 8px;
+.topbar {
     background: #151924;
     border-bottom: 1px solid #2a3143;
-    overflow-x: auto;
 }
-
-.info-box {
-    flex: 1;
-    min-width: 52px;
-    background: #2a3143;
-    border-radius: 8px;
-    text-align: center;
-    padding: 6px 2px;
-    border: 1px solid #3b4a63;
-}
-
-.info-box .lbl { font-size: 10px; color: #a8a8b3; font-weight: bold; }
-.info-box .val { font-size: 14px; font-weight: 900; color: #fff; }
-.info-box.highlight { background: #ffd166; color: #2d2a3a; }
-.info-box.highlight .lbl { color: #333; }
-.info-box.highlight .val { color: #2d2a3a; }
-
-.sound-box { cursor: pointer; background: #3b4a63; }
-
-.status-bar {
-    background: #5a4a8a;
+.brand {
     color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+}
+.balance-pill {
+    background: #2a3143;
+    color: #ffd166;
+}
+/* Rest of your styles... */
+/* Instant Purchase Styles */
+.cartela-picker .cg-item {
+    padding: 12px 0;
+    text-align: center;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #e0d4f0;
+    color: #2d2a3a;
+}
+
+.cartela-picker .cg-item.mine {
+    background: #27ae60 !important;
+    color: #fff !important;
+    box-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
+    transform: scale(1.02);
+}
+
+.cartela-picker .cg-item.sold {
+    background: #444 !important;
+    color: #888 !important;
+    text-decoration: line-through;
+    cursor: not-allowed;
+}
+/* ═══ CARTELA SCREEN LAYOUT (Screenshot Match) ═══ */
+body {
+    background-color: #0d111a;
+    color: #fff;
+}
+
+.top-nav-bar {
     display: flex;
     justify-content: space-between;
-    padding: 10px 14px;
+    padding: 10px 15px;
+    background: #151924;
+}
+.nav-btn {
+    background: #2a3143;
+    color: #fff;
+    border: 1px solid #3b4a63;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.wallet-info-bar {
+    display: flex;
+    gap: 8px;
+    padding: 0 15px 15px 15px;
+    background: #151924;
+}
+.w-box {
+    flex: 1;
+    background: #2a3143;
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #3b4a63;
+}
+.w-lbl {
+    font-size: 9px;
+    color: #a8a8b3;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+.w-val {
+    font-size: 16px;
+    color: #fff;
+    font-weight: 900;
+}
+/* 8-Column Dense Grid */
+/* Cartela Selection Grid */
+.cartela-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    padding: 10px;
+    padding-bottom: 120px; /* Space for the floating button */
+}
+
+.cg-item {
+    background: #232e3c;
+    color: #fff;
+    border-radius: 8px;
+    padding: 15px 0;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.cg-item:active {
+    transform: scale(0.95);
+}
+
+/* Green = Mine */
+.cg-item.mine {
+    background: #2ecc71;
+    color: white;
+}
+
+/* Yellow = Sold to someone else */
+.cg-item.sold {
+    background: #f1c40f;
+    color: #333;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+/* 1. Fix the Left Board (1-75) */
+.called-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    padding: 5px;
+}
+.called-grid .num {
+    background: #e0e0e0;
+    color: #333;
+    text-align: center;
+    padding: 6px 0;
+    border-radius: 4px;
     font-weight: bold;
     font-size: 14px;
 }
-#countdown { color: #ffd166; }
-
-/* ═══════════════════════════════════════════════
-   GAME LAYOUT
-   ═══════════════════════════════════════════════ */
-.game-layout {
-    display: grid;
-    grid-template-columns: 45% 55%; /* Left board / Right cartelas */
-    gap: 8px;
-    padding: 8px;
+.called-grid .num.drawn {
+    background: #9b59b6; /* Purple when drawn */
+    color: white;
 }
 
-/* ── Left Side: 1-75 Board ── */
-.called-panel {
-    background: #151924;
-    border-radius: 10px;
+/* 2. Fix Your Cartela (5x5 Grid) */
+.my-cartela-wrapper {
+    background: #232e3c;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 2px solid #3a475a;
+}
+.my-cartela-header {
+    text-align: center;
+    color: #ffd166;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+.my-cartela-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+.my-cartela-grid .cell {
+    background: #ffffff;
+    color: #333;
+    text-align: center;
+    padding: 12px 0;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+/* When a number is called, highlight it Yellow so the user knows to tap it */
+.my-cartela-grid .cell.called {
+    background: #f1c40f;
+    color: #333;
+}
+/* When the user taps it, it becomes Green */
+.my-cartela-grid .cell.marked {
+    background: #2ecc71;
+    color: white;
+}
+
+/* 3. Style the Bingo Button inside the card */
+.bingo-btn-card {
+    width: 100%;
+    margin-top: 10px;
+    background: #e74c3c;
+    color: white;
+    font-weight: 900;
+    font-size: 16px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #c0392b;
+}
+.bingo-btn-card:active {
+    transform: translateY(4px);
+    box-shadow: none;
+}
+body {
+    background: #b8a8d9;
+    color: #2d2a3a;
+    min-height: 100vh;
+    padding-bottom: 70px;
+}
+
+.topbar {
+    background: #2d2a3a; color: #fff;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; font-weight: bold;
+}
+.brand { font-size: 18px; }
+.balance-pill { background: #6c5a9c; padding: 4px 10px; border-radius: 12px; font-size: 13px; }
+
+.content { padding: 14px; }
+
+.section-title {
+    font-weight: bold; color: #fff; background: #7a68ab;
+    padding: 8px 12px; border-radius: 8px; margin: 16px 0 10px;
+    font-size: 15px;
+}
+.list-head {
+    display: grid; grid-template-columns: 1fr 1fr 1.2fr;
+    color: #fff; font-weight: bold; padding: 6px 4px;
+    font-size: 12px; text-transform: uppercase;
+}
+
+.rooms-list { display: flex; flex-direction: column; gap: 8px; }
+.room-card {
+    background: #c8b8e5; border-radius: 10px; padding: 12px;
+    display: grid; grid-template-columns: 1fr 1fr 1.2fr; align-items: center;
+}
+.room-stake { font-size: 22px; font-weight: 800; }
+.room-stake small { font-size: 11px; display: block; color: #555; }
+.room-win { color: #b8860b; font-weight: bold; font-size: 18px; }
+.room-win small { display: block; color: #666; font-size: 11px; font-weight: normal; }
+.room-status { display: flex; flex-direction: column; gap: 4px; }
+.badge {
+    background: #4a90e2; color: #fff; font-size: 10px;
+    padding: 2px 6px; border-radius: 10px; text-align: center;
+}
+.badge.ready { background: #999; }
+.join-btn {
+    background: #2ecc71; color: #fff; border: none; border-radius: 8px;
+    padding: 8px; font-weight: bold; cursor: pointer;
+}
+.join-btn:disabled { background: #888; cursor: not-allowed; }
+
+.game-top { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.called-col {
+    background: #c8b8e5; border-radius: 10px; padding: 8px;
+    height: 280px; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+}
+.called-col .num {
+    background: #e0d4f0; text-align: center; padding: 4px 0;
+    border-radius: 6px; font-size: 13px;
+}
+.called-col .num.drawn { background: #7a68ab; color: #fff; font-weight: bold; }
+
+.current-call-box {
+    background: #c8b8e5; border-radius: 10px; padding: 14px;
+    text-align: center; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+}
+.cc-label { font-size: 12px; font-weight: bold; color: #4a3a6a; }
+.cc-number {
+    font-size: 46px; font-weight: 900; color: #ff6b1a;
+    margin: 6px 0;
+}
+.countdown {
+    background: #e0d4f0; border-radius: 20px; padding: 4px 14px;
+    font-weight: bold; color: #555; font-size: 13px;
+}
+
+.cartela {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 4px; margin-top: 16px;
+}
+.cartela .cell {
+    background: #e0d4f0; border-radius: 6px; padding: 10px 0;
+    text-align: center; font-weight: bold; font-size: 16px;
+    color: #333;
+}
+.cartela .cell.marked { background: #2ecc71; color: #fff; }
+.board-label { text-align: center; font-size: 12px; color: #666; margin-top: 6px; }
+
+.bingo-btn {
+    background: #ff6b1a; color: #fff; border: none;
+    width: 100%; padding: 16px; border-radius: 30px;
+    font-size: 20px; font-weight: 900; letter-spacing: 2px;
+    margin-top: 16px; box-shadow: 0 4px 12px rgba(255,107,26,.4);
+    cursor: pointer;
+}
+.row-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.btn-blue, .btn-red {
+    padding: 12px; border: none; border-radius: 30px;
+    color: #fff; font-weight: bold; cursor: pointer;
+}
+.btn-blue { background: #3498db; }
+.btn-red { background: #e74c3c; }
+
+.wallet-card {
+    background: linear-gradient(135deg, #7a68ab, #4a3a6a);
+    border-radius: 14px; padding: 20px; color: #fff;
+    text-align: center; margin-bottom: 16px;
+}
+.wallet-label { font-size: 13px; opacity: .85; }
+.wallet-amount { font-size: 32px; font-weight: 900; margin-top: 6px; }
+
+.input-row {
+    display: flex; gap: 8px; margin-bottom: 16px;
+}
+.input-row input {
+    flex: 1; padding: 12px; border-radius: 8px;
+    border: 1px solid #999; font-size: 14px;
+}
+.input-row button {
+    background: #2ecc71; color: #fff; border: none;
+    padding: 0 20px; border-radius: 8px; font-weight: bold;
+    cursor: pointer;
+}
+
+.tx-list, .history-list { display: flex; flex-direction: column; gap: 6px; }
+.tx-item, .history-item {
+    background: #c8b8e5; padding: 10px 12px; border-radius: 8px;
+    display: flex; justify-content: space-between; font-size: 13px;
+}
+.tx-amount.positive { color: #2ecc71; font-weight: bold; }
+.tx-amount.negative { color: #e74c3c; font-weight: bold; }
+
+.profile-card {
+    background: #c8b8e5; border-radius: 14px; padding: 24px;
+    text-align: center;
+}
+.profile-avatar {
+    font-size: 46px; background: #7a68ab; color: #fff;
+    width: 80px; height: 80px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 12px;
+}
+.profile-name { font-size: 20px; font-weight: bold; }
+.profile-username { color: #666; margin-top: 4px; }
+.profile-balance { margin-top: 14px; font-size: 18px; font-weight: bold; color: #7a68ab; }
+
+.bottomnav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; display: flex; justify-content: space-around;
+    padding: 6px 0; box-shadow: 0 -2px 8px rgba(0,0,0,.1);
+}
+.nav-item {
+    display: flex; flex-direction: column; align-items: center;
+    color: #888; text-decoration: none; font-size: 11px; padding: 4px 8px;
+}
+.nav-item.active { color: #7a68ab; font-weight: bold; }
+.nav-item .icon { font-size: 20px; }
+
+.loader { text-align: center; padding: 20px; color: #555; }
+
+/* ═══ TOP INFO BAR ═══ */
+.top-info {
+    display: flex; gap: 4px; padding: 6px;
+    background: #7a68ab; overflow-x: auto;
+}
+.info-box {
+    flex: 1; min-width: 52px;
+    background: #e0d4f0; border-radius: 6px;
+    text-align: center; padding: 4px 2px;
+}
+.info-box .lbl { font-size: 9px; color: #555; }
+.info-box .val { font-size: 13px; font-weight: 800; color: #2d2a3a; }
+.sound-box { cursor: pointer; background: #c8b8e5; }
+
+/* ═══ MAIN GAME AREA ═══ */
+.game-main {
+    display: grid; grid-template-columns: 46% 54%;
+    gap: 6px; padding: 6px;
+}
+
+.left-col {
+    background: #c8b8e5; border-radius: 8px;
+    padding: 6px; height: 460px;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.big-called {
+    background: #7a68ab; color: #fff;
+    font-size: 32px; font-weight: 900;
+    text-align: center; border-radius: 8px;
+    padding: 6px;
+    min-height: 50px;
+}
+.called-grid {
+    flex: 1; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 3px; align-content: start;
+}
+.called-grid .num {
+    background: #e0d4f0; text-align: center;
+    padding: 5px 0; border-radius: 5px;
+    font-size: 13px; color: #555;
+}
+.called-grid .num.drawn {
+    background: #7a68ab; color: #fff; font-weight: bold;
+}
+
+.right-col {
+    display: flex; flex-direction: column; gap: 6px;
+}
+
+.countdown-box {
+    background: #e0d4f0; border-radius: 8px;
+    padding: 8px 12px; display: flex;
+    justify-content: space-between; align-items: center;
+    font-weight: bold; color: #4a3a6a; font-size: 15px;
+}
+#countdown { color: #7a68ab; }
+
+.current-call-box {
+    background: #7a68ab; color: #fff; border-radius: 8px;
+    padding: 8px 12px; display: flex;
+    justify-content: space-between; align-items: center;
+    font-weight: bold;
+}
+.cc-circle {
+    background: #ff6b1a; color: #fff;
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 900;
+}
+
+/* ═══ BINGO LETTERS ═══ */
+.bingo-letters {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+}
+.bingo-letters .bl {
+    text-align: center; padding: 6px 0;
+    border-radius: 50%; color: #fff; font-weight: 900; font-size: 16px;
+}
+.bl.b1 { background: #f39c12; }
+.bl.b2 { background: #27ae60; }
+.bl.b3 { background: #2980b9; }
+.bl.b4 { background: #c0392b; }
+.bl.b5 { background: #6c3d8a; }
+
+/* ═══ CARTELA ═══ */
+.cartela {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 4px; background: #7a68ab;
+    padding: 6px; border-radius: 8px;
+}
+.cartela .cell {
+    background: #e0d4f0; border-radius: 5px;
+    padding: 12px 0; text-align: center;
+    font-weight: bold; font-size: 16px; color: #2d2a3a;
+}
+.cartela .cell.marked {
+    background: #27ae60; color: #fff;
+    position: relative;
+}
+.cartela .cell.marked::after {
+    content: "✓"; position: absolute;
+    top: 2px; right: 4px; font-size: 10px;
+    color: #fff;
+}
+
+.board-label {
+    text-align: center; font-size: 12px;
+    color: #4a3a6a; font-weight: bold;
+}
+
+/* ═══ BINGO BUTTON ═══ */
+.bingo-btn {
+    background: #ff6b1a; color: #fff; border: none;
+    width: calc(100% - 24px); margin: 10px 12px;
+    padding: 18px; border-radius: 40px;
+    font-size: 22px; font-weight: 900; letter-spacing: 3px;
+    box-shadow: 0 4px 12px rgba(255,107,26,.5);
+    cursor: pointer;
+}
+.bingo-btn:active { transform: scale(0.97); }
+
+.row-btns {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px; padding: 0 12px 12px;
+}
+/* ═══ 10-COL CARTELA PICKER ═══ */
+.cartela-picker {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);   /* 10 per row */
+    gap: 4px;
     padding: 8px;
-    height: 520px;
+    background: #c8b8e5;
+    border-radius: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.cartela-picker .cg-item {
+    background: #e0d4f0;
+    text-align: center;
+    padding: 8px 0;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+    color: #2d2a3a;
+    cursor: pointer;
+    user-select: none;
+    transition: all .12s;
+}
+.cartela-picker .cg-item.selected {
+    background: #ff6b1a; color: #fff; transform: scale(1.08);
+}
+.cartela-picker .cg-item.mine {
+    background: #27ae60; color: #fff;
+}
+.cartela-picker .cg-item.sold {
+    background: #888; color: #ddd;
+    cursor: not-allowed; text-decoration: line-through;
+}
+
+/* ═══ BINGO PREVIEW (5×5 with letters) ═══ */
+.bingo-preview {
+    background: #7a68ab;
+    padding: 8px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+.bingo-preview .header-letters {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 4px; margin-bottom: 6px;
+}
+.bingo-preview .header-letters .hl {
+    text-align: center; padding: 5px 0;
+    border-radius: 50%; color: #fff; font-weight: 900; font-size: 14px;
+}
+.hl.b1 { background: #f39c12; }
+.hl.b2 { background: #27ae60; }
+.hl.b3 { background: #2980b9; }
+.hl.b4 { background: #c0392b; }
+.hl.b5 { background: #6c3d8a; }
+
+.preview-cartela-title {
+    color: #fff; font-weight: bold; font-size: 12px;
+    margin-bottom: 6px;
+}
+.preview-cell-row {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+.preview-cell {
+    background: #e0d4f0; border-radius: 4px;
+    text-align: center; padding: 8px 0;
+    font-weight: bold; font-size: 13px;
+}
+
+/* ═══ INTERACTIVE CELL STATES ═══ */
+.cartela .cell.callable {
+    box-shadow: inset 0 0 0 2px #7a68ab;
+    cursor: pointer;
+}
+.cartela .cell.marked {
+    background: #27ae60; color: #fff;
+}
+.cartela .cell.line-hit {
+    background: #16a085 !important;
+    box-shadow: 0 0 10px #16a085;
+    animation: pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.06); }
+}
+.cartela .cell:not(.callable) {
+    opacity: 0.55;
+}
+
+/* ═══ STATUS BAR ═══ */
+.status-bar {
+    background: #5a4a8a; color: #fff;
+    display: flex; justify-content: space-between;
+    padding: 8px 14px; font-weight: bold; font-size: 14px;
+}
+#countdown { color: #ffd166; }
+
+/* ═══ MAIN LAYOUT ═══ */
+.game-layout {
+    display: grid;
+    grid-template-columns: 46% 54%;
+    gap: 6px;
+    padding: 6px;
+}
+
+/* ═══ CALLED PANEL (LEFT) ═══ */
+.called-panel {
+    background: #c8b8e5;
+    border-radius: 8px;
+    padding: 6px;
+    height: 480px;
     display: flex;
     flex-direction: column;
-    border: 1px solid #2a3143;
 }
 
 .bingo-header {
@@ -90,7 +623,7 @@ body {
     color: #fff;
     font-weight: 900;
     font-size: 15px;
-    width: 30px;
+    width: 28px;
     margin: 0 auto;
     display: flex; align-items: center; justify-content: center;
 }
@@ -103,10 +636,10 @@ body {
 .ranges-row {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    font-size: 9px;
-    color: #888;
+    font-size: 8px;
+    color: #555;
     text-align: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .called-grid {
@@ -114,237 +647,297 @@ body {
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
+    gap: 3px;
     align-content: start;
 }
+/* Each number cell in the called panel */
 .called-grid .num {
-    background: #2a3143;
+    background: #e0d4f0;
     text-align: center;
     padding: 6px 0;
     border-radius: 5px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: #888;
+    color: #555;
     transition: all 0.25s;
 }
+/* Called numbers turn RED */
 .called-grid .num.drawn {
     background: #e74c3c;
     color: #fff;
     font-weight: 900;
-    box-shadow: 0 0 8px rgba(231,76,60,.6);
+    box-shadow: 0 0 6px rgba(231,76,60,.6);
 }
 
-/* ── Right Side: Cartela Panel ── */
+/* ═══ CARTELA PANEL (RIGHT) ═══ */
 .cartela-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .current-call-box {
     background: #7a68ab;
     color: #fff;
     border-radius: 10px;
-    padding: 8px 14px;
+    padding: 6px 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-weight: bold;
 }
-.cc-label { font-size: 14px; }
+.cc-label { font-size: 13px; }
 .cc-circle {
     background: #ff6b1a;
-    width: 48px; height: 48px;
+    width: 42px; height: 42px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 900;
-    box-shadow: 0 0 15px rgba(255,107,26,.8);
+    font-size: 20px; font-weight: 900;
+    box-shadow: 0 0 12px rgba(255,107,26,.7);
 }
 
-/* ═══════════════════════════════════════════════
-   MY CARTELAS (5x5 GRID)
-   ═══════════════════════════════════════════════ */
-.my-cartela-wrapper {
-    background: #232e3c;
-    border-radius: 12px;
-    padding: 10px;
-    margin-bottom: 12px;
-    border: 2px solid #3a475a;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-}
-
-.my-cartela-header {
-    text-align: center;
-    color: #ffd166;
-    font-weight: bold;
+/* ═══ MY CARTELA BLOCK ═══ */
+.cartela-block {
+    background: #7a68ab;
+    border-radius: 10px;
+    padding: 8px;
     margin-bottom: 8px;
-    font-size: 16px;
 }
 
-.my-cartela-grid {
+/* B I N G O header inside cartela */
+.cartela-block .header-letters {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.cartela-block .header-letters .hl {
+    text-align: center;
+    padding: 5px 0;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 900;
+    font-size: 14px;
+    width: 26px;
+    margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+}
+.hl.b1 { background: #f39c12; }
+.hl.b2 { background: #27ae60; }
+.hl.b3 { background: #2980b9; }
+.hl.b4 { background: #c0392b; }
+.hl.b5 { background: #6c3d8a; }
+
+.preview-cartela-title {
+    color: #fff;
+    font-weight: bold;
+    font-size: 12px;
+    margin-bottom: 6px;
+    text-align: center;
+}
+
+/* 5x5 cartela grid */
+.cartela {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 4px;
 }
-
-.my-cartela-grid .cell {
-    background: #ffffff;
-    color: #333;
-    text-align: center;
+.cartela .cell {
+    background: #e0d4f0;
+    border-radius: 5px;
     padding: 10px 0;
-    border-radius: 6px;
-    font-weight: bold;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-/* Number is called: Turn Yellow */
-.my-cartela-grid .cell.called {
-    background: #f1c40f;
-}
-
-/* User taps to mark: Turn Green */
-.my-cartela-grid .cell.marked {
-    background: #2ecc71;
-    color: white;
-}
-
-/* Individual BINGO Button inside the card */
-.bingo-btn-card {
-    width: 100%;
-    margin-top: 12px;
-    background: #e74c3c;
-    color: white;
-    font-weight: 900;
-    font-size: 16px;
-    padding: 12px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    box-shadow: 0 4px 0 #c0392b;
-    transition: transform 0.1s;
-}
-.bingo-btn-card:active {
-    transform: translateY(4px);
-    box-shadow: none;
-}
-
-/* ═══════════════════════════════════════════════
-   CARTELA PICKER (LOBBY SCREEN)
-   ═══════════════════════════════════════════════ */
-.wallet-info-bar {
-    display: flex;
-    gap: 8px;
-    padding: 10px 15px;
-    background: #151924;
-}
-.w-box {
-    flex: 1;
-    background: #2a3143;
-    border-radius: 8px;
-    padding: 8px;
     text-align: center;
-    border: 1px solid #3b4a63;
-}
-.w-lbl { font-size: 10px; color: #a8a8b3; font-weight: bold; margin-bottom: 4px; }
-.w-val { font-size: 16px; color: #fff; font-weight: 900; }
-
-/* 8-Column Grid for Lobby */
-.cartela-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
-    padding: 15px;
-    padding-bottom: 100px; /* Space for floating button */
-}
-
-/* 1. Available (Black) */
-.cg-item {
-    background: #000000;
-    color: #ffffff;
-    border: 1px solid #333;
-    font-weight: bold;
-    font-size: 14px;
-    text-align: center;
-    padding: 12px 0;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: transform 0.1s;
+    font-weight: 700;
+    font-size: 15px;
+    color: #2d2a3a;
+    transition: all 0.15s;
+    position: relative;
     user-select: none;
 }
-.cg-item:active { transform: scale(0.9); }
-
-/* 2. Purchased by Me (Green) */
-.cg-item.mine {
-    background: #2ecc71;
-    color: white;
-    border: none;
-    box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
-}
-
-/* 3. Purchased by Others (Yellow) */
-.cg-item.sold {
-    background: #f1c40f;
-    color: #333;
-    border: none;
-    cursor: not-allowed;
-}
-
-/* Floating Play Button */
-#playBtnContainer {
-    position: fixed;
-    bottom: 70px;
-    left: 0;
-    right: 0;
-    padding: 15px;
-    background: linear-gradient(to top, #0d111a 50%, transparent);
-    z-index: 100;
-}
-#playGameBtn {
-    width: 100%;
-    padding: 16px;
-    background: #2ecc71;
-    color: white;
-    font-weight: 900;
-    font-size: 18px;
-    border-radius: 12px;
-    border: none;
+.cartela .cell.callable {
+    box-shadow: inset 0 0 0 2px #4a90e2;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
+}
+.cartela .cell.marked {
+    background: #27ae60;
+    color: #fff;
+}
+.cartela .cell.marked::after {
+    content: "✓";
+    position: absolute;
+    top: 1px; right: 4px;
+    font-size: 9px;
+    opacity: .85;
+}
+.cartela .cell.line-hit {
+    background: #16a085 !important;
+    box-shadow: 0 0 10px #16a085;
+    animation: pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.06); }
 }
 
-/* ═══════════════════════════════════════════════
-   BOTTOM NAVIGATION BAR
-   ═══════════════════════════════════════════════ */
-.bottomnav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #151924;
-    display: flex;
-    justify-content: space-around;
-    padding: 8px 0;
-    box-shadow: 0 -2px 10px rgba(0,0,0,.5);
-    border-top: 1px solid #2a3143;
-    z-index: 1000;
+/* ═══ CENTER STAR (FREE SPACE) ═══ */
+.cartela .cell.star {
+    background: #f1c40f;
+    color: #fff;
+    font-size: 18px;
+    box-shadow: inset 0 0 0 2px #d4ac0d;
+    cursor: default;
 }
-.nav-item {
+.cartela .cell.star::after { content: none; }
+
+.cartela .cell:not(.callable):not(.marked):not(.star) {
+    opacity: 0.55;
+}
+/* ═══ ADD MORE CARTELAS BUTTON ═══ */
+.add-more-btn {
+    background: #27ae60; /* Green to match the 'Bingo' theme */
+    color: #fff;
+    border: none;
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 15px;
+    margin-top: 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(39, 174, 96, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.1s;
+}
+.add-more-btn:active {
+    transform: scale(0.97);
+}
+/* ═══ DASHBOARD TOP ═══ */
+.dashboard-top {
+    display: flex;
+    gap: 10px;
+    padding: 16px;
+    background: #7a68ab;
+    margin: 10px;
+    border-radius: 12px;
+}
+.dash-box {
+    flex: 1;
+    background: #e0d4f0;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+}
+.dash-box.highlight {
+    background: #ffd166;
+    color: #2d2a3a;
+    box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
+}
+.dash-label { font-size: 12px; color: #555; margin-bottom: 4px; font-weight: bold; }
+.dash-value { font-size: 22px; font-weight: 900; }
+
+/* ═══ MENU GRID ═══ */
+.menu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 10px;
+}
+.menu-btn {
+    background: #c8b8e5;
+    border-radius: 12px;
+    padding: 20px 10px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transition: transform 0.1s;
     display: flex;
     flex-direction: column;
     align-items: center;
-    color: #888;
-    text-decoration: none;
-    font-size: 11px;
-    padding: 4px 8px;
+    justify-content: center;
 }
-.nav-item.active { color: #ffd166; font-weight: bold; }
-.nav-item .icon { font-size: 22px; margin-bottom: 2px; }
+.menu-btn:active { transform: scale(0.95); }
+.menu-btn .icon { font-size: 32px; margin-bottom: 8px; }
+.menu-btn .text { font-weight: bold; color: #2d2a3a; font-size: 14px; }
+.menu-btn.play-btn {
+    background: #ff6b1a;
+    color: white;
+}
+.menu-btn.play-btn .text { color: white; font-size: 18px; }
+.menu-btn.full-width {
+    grid-column: span 2;
+    background: #27ae60;
+    color: white;
+    flex-direction: row;
+    padding: 15px;
+}
+.menu-btn.full-width .icon { margin-bottom: 0; margin-right: 10px; font-size: 24px; }
+.menu-btn.full-width .text { color: white; }
 
-/* ═══════════════════════════════════════════════
-   MODALS & BUTTONS
-   ═══════════════════════════════════════════════ */
+/* ═══ MODALS ═══ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.modal-content {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    position: relative;
+}
+.modal-content h3 { margin-bottom: 10px; color: #2d2a3a; }
+.modal-content p { margin-bottom: 15px; color: #555; font-size: 14px; }
+.modal-content input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+}
+.modal-btn {
+    width: 100%;
+    padding: 12px;
+    background: #7a68ab;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #888;
+}
+.ref-list {
+    margin-top: 15px;
+    max-height: 150px;
+    overflow-y: auto;
+    text-align: left;
+    font-size: 14px;
+    background: #f0f0f0;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+/* 🏆 MODAL STYLES */
 .modal {
     display: none;
     position: fixed;
@@ -356,56 +949,17 @@ body {
     padding: 15px;
 }
 .modal-content {
-    background: #1e2230;
-    border-radius: 15px;
-    padding: 25px;
+    background: #2d2a3a;
+    border-radius: 12px;
+    padding: 20px;
     width: 100%;
-    max-width: 380px;
+    max-width: 350px;
     text-align: center;
     position: relative;
-    border: 2px solid #2a3143;
-    box-shadow: 0 0 30px rgba(0,0,0,0.8);
-}
-.close {
-    position: absolute;
-    top: 10px; right: 15px;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    color: #888;
-}
-.modal-btn {
-    width: 100%;
-    padding: 15px;
-    background: #ffd166;
-    color: #2d2a3a;
-    border: none;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 900;
-    cursor: pointer;
-    margin-top: 15px;
+    box-shadow: 0 0 20px rgba(255, 209, 102, 0.3);
 }
 
-.row-btns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    padding: 0 15px 15px;
-}
-.btn-blue, .btn-red {
-    padding: 14px;
-    border: none;
-    border-radius: 30px;
-    color: #fff;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 15px;
-}
-.btn-blue { background: #3498db; }
-.btn-red { background: #e74c3c; }
-
-/* Toast Notification */
+/* 🍞 TOAST NOTIFICATION STYLES */
 .toast-notification {
     position: fixed;
     top: 20px;
@@ -422,11 +976,101 @@ body {
     transition: all 0.3s ease;
     z-index: 9999;
     text-align: center;
+    width: 85%;
+    max-width: 320px;
+    border: 1px solid #ff8c42;
 }
 .toast-notification.show {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
 }
+/* ═══ CARTELA SCREEN LAYOUT ═══ */
+body {
+    background-color: #0d111a;
+    color: #fff;
+}
 
-/* Loader */
-.loader { text-align: center; padding: 20px; color: #888; font-weight: bold; }
+.top-nav-bar {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: #151924;
+}
+.nav-btn {
+    background: #2a3143;
+    color: #fff;
+    border: 1px solid #3b4a63;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.wallet-info-bar {
+    display: flex;
+    gap: 8px;
+    padding: 0 15px 15px 15px;
+    background: #151924;
+}
+.w-box {
+    flex: 1;
+    background: #2a3143;
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #3b4a63;
+}
+.w-lbl {
+    font-size: 9px;
+    color: #a8a8b3;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+.w-val {
+    font-size: 16px;
+    color: #fff;
+    font-weight: 900;
+}
+
+/* 8-Column Dense Grid */
+.cartela-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    padding: 10px 15px 80px 15px;
+}
+
+/* 👇 1. AVAILABLE (BLACK) */
+.cg-item {
+    background: #000000;
+    color: #ffffff;
+    border: 1px solid #333;
+    font-weight: bold;
+    font-size: 13px;
+    text-align: center;
+    padding: 12px 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.1s;
+    user-select: none;
+}
+
+.cg-item:active {
+    transform: scale(0.9);
+}
+
+/* 👇 2. PURCHASED BY ME (GREEN) */
+.cg-item.mine {
+    background: #2ecc71;
+    color: white;
+    border: none;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
+}
+
+/* 👇 3. PURCHASED BY OTHERS (YELLOW) */
+.cg-item.sold {
+    background: #f1c40f;
+    color: #333;
+    border: none;
+    cursor: not-allowed;
+}

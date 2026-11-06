@@ -44,14 +44,23 @@ def verify_init_data(init_data: str, bot_token: str):
 
 def webapp_auth_required(view_func):
     """Decorator: authenticate the request using Telegram initData."""
+
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        init_data = (
-            request.headers.get('X-Telegram-Init-Data')
-            or request.GET.get('initData')
-            or ''
-        )
-        if not init_data:
+        # ✅ FIXED: Look for the Authorization header first (TgWebApp <token>)
+        auth_header = request.headers.get('Authorization', '')
+
+        if auth_header.startswith('TgWebApp '):
+            init_data = auth_header[len('TgWebApp '):]
+        else:
+            # Fallback to old headers if the cache hasn't updated yet
+            init_data = (
+                    request.headers.get('X-Telegram-Init-Data')
+                    or request.GET.get('initData')
+                    or ''
+            )
+
+        if not init_data or not init_data.strip():
             return JsonResponse({'ok': False, 'error': 'missing_init_data'}, status=401)
 
         is_valid, parsed = verify_init_data(init_data, settings.TELEGRAM_BOT_TOKEN)
