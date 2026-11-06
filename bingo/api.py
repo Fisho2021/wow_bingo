@@ -1,5 +1,7 @@
 import json
+import traceback
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -24,7 +26,7 @@ def _json(data, status=200):
 def _get_room():
     room = GameRoom.objects.first()
     if not room:
-        room = GameRoom.objects.create(stake=10.0, name="Main Bingo Room", is_active=True)
+        room = GameRoom.objects.create(stake=Decimal('10.00'), name="Main Bingo Room", is_active=True)
     return room
 
 
@@ -84,11 +86,16 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
-    # ✅ FIX 1: Ensure exactly 200 cartelas exist
-    if Cartela.objects.count() < 200:
+    # ✅ FIX 1: Ensure exactly 200 cartelas exist in the DB
+    cartela_count = Cartela.objects.count()
+    if cartela_count > 200:
+        # Delete extra cartelas to keep exactly 200
+        ids_to_keep = list(Cartela.objects.order_by('cartela_number').values_list('id', flat=True)[:200])
+        Cartela.objects.exclude(id__in=ids_to_keep).delete()
+    elif cartela_count < 200:
         generate_cartelas(200)
 
-    # ✅ FIX 2: Only fetch the first 200 cartelas
+    # ✅ Fetch exactly 200
     cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number')[:200])
 
     round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
@@ -134,7 +141,7 @@ def list_cartelas(request):
 @webapp_auth_required
 @require_http_methods(["POST"])
 def toggle_cartela(request):
-    try:  # ✅ ADDED TRY/EXCEPT TO CATCH THE CRASH
+    try:
         body = json.loads(request.body or '{}')
         cartela_id = body.get('cartela_id')
         if not cartela_id:
@@ -142,6 +149,9 @@ def toggle_cartela(request):
 
         room = _get_room()
         user = request.tg_user
+
+        # ✅ FIX 2: Safely convert stake to Decimal for math operations
+        stake_amount = Decimal(str(room.stake))
 
         with transaction.atomic():
             round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by(
@@ -168,14 +178,16 @@ def toggle_cartela(request):
                 c.is_sold = False
                 c.save()
 
-                user.balance += room.stake
+                user.balance += stake_amount
                 user.save()
-                Transaction.objects.create(user=user, amount=room.stake, type='refund',
+                Transaction.objects.create(user=user, amount=stake_amount, type='refund',
                                            note=f"Released Cartela #{c.cartela_number}")
 
-                # Check if method exists before calling
-                if hasattr(round_obj, 'recalculate_pool'):
-                    round_obj.recalculate_pool()
+                try:
+                    if hasattr(round_obj, 'recalculate_pool'):
+                        round_obj.recalculate_pool()
+                except Exception as e:
+                    print(f"⚠️ recalculate_pool error: {e}")
 
                 round_obj.save()
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
@@ -185,7 +197,7 @@ def toggle_cartela(request):
                 if any(p['cartela_number'] == c.cartela_number for p in current_players):
                     return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
 
-                if user.balance < room.stake:
+                if user.balance < stake_amount:
                     return _json({'ok': False, 'error': 'Insufficient balance.'}, 400)
 
                 c.is_sold = True
@@ -201,14 +213,16 @@ def toggle_cartela(request):
 
                 round_obj.players = current_players + [new_player]
 
-                user.balance -= room.stake
+                user.balance -= stake_amount
                 user.save()
-                Transaction.objects.create(user=user, amount=-room.stake, type='buy_cartela',
+                Transaction.objects.create(user=user, amount=-stake_amount, type='buy_cartela',
                                            note=f"Bought Cartela #{c.cartela_number}")
 
-                # Check if method exists before calling
-                if hasattr(round_obj, 'recalculate_pool'):
-                    round_obj.recalculate_pool()
+                try:
+                    if hasattr(round_obj, 'recalculate_pool'):
+                        round_obj.recalculate_pool()
+                except Exception as e:
+                    print(f"⚠️ recalculate_pool error: {e}")
 
                 if not round_obj.start_at:
                     round_obj.start_at = timezone.now() + timedelta(seconds=60)
@@ -217,8 +231,7 @@ def toggle_cartela(request):
                 return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()  # Prints to Render Logs
+        traceback.print_exc()  # Prints exact error to Render logs
         return _json({'ok': False, 'error': f"Python Crash: {str(e)}"}, 500)
 
 
@@ -344,7 +357,6 @@ def toggle_mark(request, player_id):
             if number in flat_nums:
                 marked = set(p.get('marked_numbers', []))
 
-                # ✅ PERMANENT MARK: Only add, never remove
                 if number not in marked:
                     marked.add(number)
                     p['marked_numbers'] = list(marked)
@@ -358,7 +370,7 @@ def toggle_mark(request, player_id):
                     updated = True
 
     if updated:
-        round_obj.players = current_players  # ✅ Explicit reassignment to save JSON
+        round_obj.players = current_players
         round_obj.save(update_fields=['players'])
         return _json({'ok': True})
 
@@ -691,7 +703,7 @@ def _settle_round(round_obj, winners):
         payouts[p['player_id']] = str(pool)
         Transaction.objects.create(user=user, amount=pool, type='win', note=f"Round #{round_obj.round_number} winner")
     elif len(ordered) >= 2:
-        for p, amount in [(ordered[0][0], pool * 0.60), (ordered[1][0], pool * 0.40)]:
+        for p, amount in [(ordered[0][0], pool * Decimal('0.60')), (ordered[1][0], pool * Decimal('0.40'))]:
             user = TelegramUser.objects.get(telegram_id=p['player_id'])
             user.balance += amount
             user.total_earned += amount
