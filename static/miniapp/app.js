@@ -39,27 +39,12 @@ function playBingoSound() {
     setTimeout(() => beep(1100, 0.3), 300);
 }
 
+// ✅ FIXED: Use Google TTS for reliable Amharic voice inside Telegram
 function speakAmharic(number) {
-    if (!soundOn || !window.speechSynthesis) return;
-
-    const amharicNumbers = {
-        1:"አንድ",2:"ሁለት",3:"ሶስት",4:"አራት",5:"አምስት",6:"ስድስት",7:"ሰባት",8:"ስምንት",9:"ዘጠኝ",10:"አስር",
-        11:"አስራ አንድ",12:"አስራ ሁለት",13:"አስራ ሶስት",14:"አስራ አራት",15:"አስራ አምስት",16:"አስራ ስድስት",17:"አስራ ሰባት",18:"አስራ ስምንት",19:"አስራ ዘጠኝ",20:"ሃያ",
-        21:"ሃያ አንድ",22:"ሃያ ሁለት",23:"ሃያ ሶስት",24:"ሃያ አራት",25:"ሃያ አምስት",26:"ሃያ ስድስት",27:"ሃያ ሰባት",28:"ሃያ ስምንት",29:"ሃያ ዘጠኝ",30:"ሰላሳ",
-        31:"ሰላሳ አንድ",32:"ሰላሳ ሁለት",33:"ሰላሳ ሶስት",34:"ሰላሳ አራት",35:"ሰላሳ አምስት",36:"ሰላሳ ስድስት",37:"ሰላሳ ሰባት",38:"ሰላሳ ስምንት",39:"ሰላሳ ዘጠኝ",40:"አርባ",
-        41:"አርባ አንድ",42:"አርባ ሁለት",43:"አርባ ሶስት",44:"አርባ አራት",45:"አርባ አምስት",46:"አርባ ስድስት",47:"አርባ ሰባት",48:"አርባ ስምንት",49:"አርባ ዘጠኝ",50:"ሃምሳ",
-        51:"ሃምሳ አንድ",52:"ሃምሳ ሁለት",53:"ሃምሳ ሶስት",54:"ሃምሳ አራት",55:"ሃምሳ አምስት",56:"ሃምሳ ስድስት",57:"ሃምሳ ሰባት",58:"ሃምሳ ስምንት",59:"ሃምሳ ዘጠኝ",60:"ስድሳ",
-        61:"ስድሳ አንድ",62:"ስድሳ ሁለት",63:"ስድሳ ሶስት",64:"ስድሳ አራት",65:"ስድሳ አምስት",66:"ስድሳ ስድስት",67:"ስድሳ ሰባት",68:"ስድሳ ስምንት",69:"ስድሳ ዘጠኝ",70:"ሰባ",
-        71:"ሰባ አንድ",72:"ሰባ ሁለት",73:"ሰባ ሶስት",74:"ሰባ አራት",75:"ሰባ አምስት"
-    };
-
-    const text = amharicNumbers[number];
-    if (!text) return;
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'am-ET';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
+    if (!soundOn) return;
+    const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${number}&tl=am&client=tw-ob`;
+    const audio = new Audio(audioUrl);
+    audio.play().catch(e => console.log("Audio play failed:", e));
 }
 
 // ═══ API WRAPPER ═══
@@ -111,7 +96,6 @@ async function refreshGame() {
         return;
     }
 
-    // ✅ FIXED: Define the missing variables
     const roundData = r.round || {};
     const called = roundData.called_numbers || [];
     const last = called.length > 0 ? called[called.length - 1] : null;
@@ -135,13 +119,34 @@ async function refreshGame() {
 
         document.getElementById('winnerModal').style.display = 'flex';
         playBingoSound();
+
+        // ✅ ADDED: Auto-start next game in 5 seconds
+        let timeLeft = 5;
+        const countdownEl = document.getElementById('modalCountdown');
+        const progressBar = document.getElementById('modalProgressBar');
+
+        if (countdownEl && progressBar) {
+            countdownEl.textContent = timeLeft + 'S';
+            progressBar.style.width = '100%';
+
+            const timer = setInterval(() => {
+                timeLeft--;
+                countdownEl.textContent = timeLeft + 'S';
+                progressBar.style.width = (timeLeft / 5 * 100) + '%';
+
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    window.location.href = '/app/cartelas/'; // Redirect to lobby
+                }
+            }, 1000);
+        }
         return;
     }
 
     // 🔊 Voice and Sound
     if (called.length > _lastCalledCount && _lastCalledCount > 0 && last) {
         playCallSound();
-        speakAmharic(last);
+        speakAmharic(last); // ✅ Speak the number in Amharic
         if (tg) tg.HapticFeedback.impactOccurred('light');
     }
     _lastCalledCount = called.length;
@@ -186,7 +191,6 @@ async function refreshGame() {
 
             // ✅ Render cells + Center Star Logic
             const cellsHtml = flatNums.map((n, index) => {
-                // Check if this is the CENTER cell (index 12 in a 5x5 grid)
                 if (index === 12) {
                     return `<div class="cell marked star">⭐</div>`;
                 }
@@ -239,8 +243,7 @@ async function claimBingo() {
     if (r.ok) {
         playBingoSound();
         if (tg) tg.showAlert(`🎉 BINGO! Payout: ${JSON.stringify(r.payouts)}`);
-        if (pollTimer) clearInterval(pollTimer);
-        setTimeout(() => window.location.href = '/app/wallet/', 2000);
+        // ✅ FIXED: Removed redirect to wallet here. The Winner Modal will handle redirects.
     } else {
         beep(220, 0.3, 'square');
         if (tg) tg.showAlert(`❌ ${r.error === 'FALSE_BINGO' ? r.message : r.error}`);

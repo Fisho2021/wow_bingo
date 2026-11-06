@@ -20,9 +20,9 @@
         <span id="statusText">Waiting…</span>
         <span id="countdown" style="color: #ffd166;">—</span>
     </div>
-   <div style="font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="playersListText">
-    Last Calls: None
-</div>
+    <div style="font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="playersListText">
+        Last Calls: None
+    </div>
 </div>
 
 <!-- MAIN GAME AREA -->
@@ -51,7 +51,7 @@
     </div>
 </div>
 
-<!-- BOTTOM BUTTONS (Global Bingo button removed) -->
+<!-- BOTTOM BUTTONS -->
 <div class="row-btns" style="margin-top: 15px;">
     <button class="btn-blue" id="refreshBtn">⟳ Refresh</button>
     <button class="btn-red" id="leaveBtn" onclick="window.location.href='/app/cartelas/'">⏻ Leave</button>
@@ -71,6 +71,7 @@
             CARTELA NO #<span id="winnerCartelaNum">000</span>
         </p>
 
+        <!-- Winning Cartela Grid -->
         <div style="background: #1e2230; border-radius: 15px; padding: 10px; margin-bottom: 20px;">
             <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 5px;">
                 <div style="background: #3498db; color: white; font-weight: bold; padding: 5px 0; border-radius: 5px; font-size: 14px;">B</div>
@@ -83,7 +84,16 @@
             <div id="winnerGridContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;"></div>
         </div>
 
-        <button class="modal-btn" onclick="window.location.href='/app/cartelas/'" style="background: #e67e22; color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 900; font-size: 16px; cursor: pointer; margin-top: 10px;">
+        <!-- ✅ ADDED: Countdown Timer for Auto-Start -->
+        <p style="color: #a8a8b3; font-size: 11px; letter-spacing: 1px; margin-bottom: 8px;">
+            STARTING IN <span id="modalCountdown" style="color: #e67e22; font-weight: bold;">5S</span>
+        </p>
+
+        <div style="width: 100%; height: 6px; background: #2a3143; border-radius: 3px; overflow: hidden; margin-bottom: 20px;">
+            <div id="modalProgressBar" style="width: 100%; height: 100%; background: #e67e22; transition: width 1s linear;"></div>
+        </div>
+
+        <button class="modal-btn" onclick="window.location.href='/app/cartelas/'" style="background: #e67e22; color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 900; font-size: 16px; cursor: pointer;">
             PLAY NEXT GAME
         </button>
     </div>

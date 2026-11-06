@@ -729,10 +729,8 @@ def _schedule_next_round(room):
     last = GameRound.objects.order_by('-round_number').first()
     next_num = (last.round_number + 1) if last else 1
 
-    GameRound.objects.create(
-        round_number=next_num, room_id=room.id, entry_fee=room.stake,
-        status='waiting', start_at=timezone.now() + timedelta(seconds=60)
-    )
+    Cartela.objects.all().update(is_sold=False)  # Resets all cards
+    GameRound.objects.create(status = 'waiting', start_at = timezone.now() + timedelta(seconds=60))
 
 
 @csrf_exempt
