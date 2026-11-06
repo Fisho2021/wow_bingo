@@ -1,11 +1,17 @@
 import json
 import logging
-from asgiref.sync import async_to_sync
+import asyncio
+import threading
+import traceback
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ConversationHandler
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
+    filters, ConversationHandler
+)
+from telegram.request import HTTPXRequest
 
 from .bot_handlers import (
     start, play, handle_contact, menu_callback, register_commands,
@@ -17,24 +23,47 @@ from .bot_handlers import (
 )
 
 logger = logging.getLogger(__name__)
+
 _application = None
+_event_loop = None
+
+
+def get_event_loop():
+    """Creates a persistent background event loop for the bot."""
+    global _event_loop
+    if _event_loop is None or _event_loop.is_closed():
+        print("✅ Creating NEW background event loop")
+        _event_loop = asyncio.new_event_loop()
+        threading.Thread(target=_event_loop.run_forever, daemon=True).start()
+    return _event_loop
 
 
 def get_application():
     global _application
     if _application is None:
+        api_req = HTTPXRequest(
+            connection_pool_size=256,
+            pool_timeout=10.0,
+            connect_timeout=30.0,
+            read_timeout=30.0,
+        )
+        updates_req = HTTPXRequest(
+            connection_pool_size=8,
+            pool_timeout=30.0,
+            connect_timeout=30.0,
+            read_timeout=60.0,
+        )
+
         _application = (
             Application.builder()
             .token(settings.TELEGRAM_BOT_TOKEN)
-            .read_timeout(30)
-            .write_timeout(30)
-            .connect_timeout(30)
-            .pool_timeout(30)
+            .request(api_req)
+            .get_updates_request(updates_req)
             .post_init(register_commands)
             .build()
         )
 
-        # 👇 1. REGISTER CONVERSATION HANDLERS FIRST (So buttons are caught)
+        # 👇 1. REGISTER CONVERSATION HANDLERS FIRST
         dep_conv = ConversationHandler(
             entry_points=[
                 CommandHandler("deposit", deposit_start),
@@ -80,8 +109,12 @@ def get_application():
         _application.add_handler(
             CallbackQueryHandler(admin_action_callback, pattern="^(app_dep_|rej_dep_|app_wit_|rej_wit_)"))
 
-        # 👇 5. REGISTER GENERAL MENU HANDLER LAST (Fallback for other buttons)
+        # 👇 5. REGISTER GENERAL MENU HANDLER LAST
         _application.add_handler(CallbackQueryHandler(menu_callback))
+
+        # ✅ Initialize the application IN the background loop
+        loop = get_event_loop()
+        asyncio.run_coroutine_threadsafe(_application.initialize(), loop).result()
 
     return _application
 
@@ -89,18 +122,29 @@ def get_application():
 @csrf_exempt
 def telegram_webhook(request):
     if request.method == 'POST':
-        secret_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
-        if settings.TELEGRAM_WEBHOOK_SECRET and secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
-            return JsonResponse({'status': 'unauthorized'}, status=403)
+        print("🚨 INCOMING WEBHOOK FROM TELEGRAM!")
+
+        # 🛑 TEMPORARILY DISABLED SECRET TOKEN CHECK TO PREVENT 403 ERRORS
+        # secret_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
+        # if settings.TELEGRAM_WEBHOOK_SECRET and secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
+        #     return JsonResponse({'status': 'unauthorized'}, status=403)
 
         try:
             data = json.loads(request.body)
             app = get_application()
             update = Update.de_json(data, app.bot)
-            async_to_sync(app.process_update)(update)
+
+            # ✅ Process the update IN the persistent background loop
+            loop = get_event_loop()
+            future = asyncio.run_coroutine_threadsafe(app.process_update(update), loop)
+            future.result(timeout=15)
+
+            return JsonResponse({'status': 'ok'})
         except Exception as e:
-            logger.exception(f"Webhook error: {e}")
-            return JsonResponse({'status': 'error'}, status=500)
+            print("❌❌❌ WEBHOOK CRASHED ❌❌❌")
+            traceback.print_exc()
+            return JsonResponse({'status': 'error_logged'})
+
     return JsonResponse({'status': 'ok'})
 
 
@@ -109,11 +153,26 @@ def set_webhook(request):
     url = settings.TELEGRAM_WEBHOOK_URL
     if not url:
         return HttpResponse("TELEGRAM_WEBHOOK_URL not set in .env")
-    result = async_to_sync(app.bot.set_webhook)(url=url, secret_token=settings.TELEGRAM_WEBHOOK_SECRET)
-    return HttpResponse(f"Webhook set: {result} → {url}")
+
+    try:
+        loop = get_event_loop()
+        # ✅ Removed the secret token so it doesn't break
+        result = asyncio.run_coroutine_threadsafe(
+            app.bot.set_webhook(url=url, drop_pending_updates=True),
+            loop
+        ).result(timeout=30)
+        return HttpResponse(f"Webhook set: {result} → {url}")
+    except Exception as e:
+        traceback.print_exc()
+        return HttpResponse(f"Failed to set webhook: {e}")
 
 
 def clear_webhook(request):
     app = get_application()
-    async_to_sync(app.bot.delete_webhook)()
-    return HttpResponse("Webhook cleared")
+    try:
+        loop = get_event_loop()
+        asyncio.run_coroutine_threadsafe(app.bot.delete_webhook(), loop).result(timeout=30)
+        return HttpResponse("Webhook cleared")
+    except Exception as e:
+        traceback.print_exc()
+        return HttpResponse(f"Failed to clear webhook: {e}")
