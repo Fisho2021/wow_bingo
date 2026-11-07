@@ -5,187 +5,106 @@ if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#0d111a'); }
 
 let cartelas = [], stake = 0, balance = 0, myCount = 0;
 let timerInterval = null;
-let syncInterval = null;
 
-// ✅ Correct Authorization header
-async function api(path, opts = {}) {
-    const initData = window.Telegram?.WebApp?.initData || '';
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `TgWebApp ${initData}`,
-        ...(opts.headers || {})
-    };
-    try {
-        const res = await fetch(path, { ...opts, headers });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) return { ok: false, error: data.error || data.message || 'Server Error' };
-        return { ok: true, ...data };
-    } catch (e) {
-        return { ok: false, error: 'Network Error' };
-    }
-}
+// ⚠️ REPLACE THESE WITH YOUR SUPABASE URL AND ANON KEY
+const SUPABASE_URL = 'https://pneyxzpsritncwybeptx.supabase.co';
+const SUPABASE_ANON_KEY = 'pneyxzpsritncwybeptx';
 
-async function loadCartelas(isBackgroundSync = false) {
+// Initialize Supabase Client
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ... (Keep your `api()` function exactly the same) ...
+
+async function loadCartelas() {
     const r = await api('/api/cartelas/');
-    if (!r.ok) {
-        if (!isBackgroundSync) {
-            document.getElementById('cartelaGrid').innerHTML = `<div class="loader" style="color:red; grid-column: span 8;">Error: ${r.error}</div>`;
-        }
-        return;
-    }
-
-    // ✅ NEW: If the game status is active, redirect everyone to the game board immediately!
-    if (r.status === 'active') {
-        window.location.href = '/app/game/';
-        return;
-    }
+    if (!r.ok) return;
 
     cartelas = r.cartelas || [];
     stake = parseFloat(r.room.stake);
     balance = parseFloat(r.my_balance);
     myCount = cartelas.filter(c => c.mine).length;
 
-    // Update Wallets
-    document.getElementById('mainWallet').textContent = balance.toFixed(0);
-    document.getElementById('playWallet').textContent = balance.toFixed(0);
-    document.getElementById('stakeVal').textContent = stake.toFixed(0);
+    // ... (Keep your UI updates for balance, timer, etc.) ...
 
-    // Show/Hide Play Button
-    const playContainer = document.getElementById('playBtnContainer');
-    if (myCount > 0) {
-        playContainer.style.display = 'block';
-        document.getElementById('myCartelaCount').textContent = myCount;
-    } else {
-        playContainer.style.display = 'none';
-    }
-
-    // ⏱️ Handle Timer
-    if (r.starts_at) {
-        startCountdown(new Date(r.starts_at).getTime());
-    } else {
-        if (document.getElementById('timerVal')) document.getElementById('timerVal').textContent = 'Waiting...';
-        if (timerInterval) clearInterval(timerInterval);
-    }
-
-    // 🎨 Render or Sync Grid
+    // Render the grid
     const grid = document.getElementById('cartelaGrid');
+    grid.innerHTML = cartelas.map(c => {
+        let cls = 'cg-item';
+        if (c.mine) cls += ' mine';
+        else if (c.sold) cls += ' sold';
+        return `<div class="${cls}" data-id="${c.id}">${c.number}</div>`;
+    }).join('');
 
-    if (!isBackgroundSync) {
-        // Initial full render
-        grid.innerHTML = cartelas.map(c => {
-            let cls = 'cg-item';
-            if (c.mine) cls += ' mine';
-            else if (c.sold) cls += ' sold';
-            return `<div class="${cls}" data-id="${c.id}">${c.number}</div>`;
-        }).join('');
-
-        grid.querySelectorAll('.cg-item').forEach(el => {
-            el.addEventListener('click', () => handleCartelaClick(parseInt(el.dataset.id), el));
-        });
-    } else {
-        // ⚡ Background Sync: Update ONLY the changed cards (prevents lag)
-        cartelas.forEach(c => {
-            const el = document.querySelector(`.cg-item[data-id="${c.id}"]`);
-            if (!el) return;
-
-            const isMineNow = el.classList.contains('mine');
-            const isSoldNow = el.classList.contains('sold');
-
-            if (c.mine && !isMineNow) {
-                el.className = 'cg-item mine';
-            } else if (c.sold && !c.mine && !isSoldNow) {
-                el.className = 'cg-item sold';
-            } else if (!c.sold && !c.mine && (isMineNow || isSoldNow)) {
-                el.className = 'cg-item';
-            }
-        });
-    }
+    grid.querySelectorAll('.cg-item').forEach(el => {
+        el.addEventListener('click', () => handleCartelaClick(parseInt(el.dataset.id), el));
+    });
 }
 
 async function handleCartelaClick(id, element) {
     const c = cartelas.find(x => x.id === id);
-    if (!c) return;
+    if (!c || (c.sold && !c.mine)) return;
 
-    // 1. IF SOLD TO SOMEONE ELSE, BLOCK
-    if (c.sold && !c.mine) {
-        tg?.showAlert("❌ This cartela is already sold. Please choose another one.");
-        return;
-    }
-
-    // 2. ⚡ INSTANT OPTIMISTIC UI (No lag)
+    // ⚡ INSTANT OPTIMISTIC UI
     const isBuying = !c.mine;
-    if (isBuying) {
-        element.className = 'cg-item mine';
-    } else {
-        element.className = 'cg-item';
-    }
+    element.className = isBuying ? 'cg-item mine' : 'cg-item';
     c.mine = isBuying;
     c.sold = isBuying;
-
     tg?.HapticFeedback?.impactOccurred('light');
 
-    // 3. Send to backend
     const r = await api('/api/cartelas/toggle/', {
         method: 'POST',
         body: JSON.stringify({ cartela_id: id }),
     });
 
     if (!r.ok) {
-        // Revert on failure
-        if (isBuying) element.className = 'cg-item';
-        else element.className = 'cg-item mine';
+        // Revert if server failed
+        element.className = isBuying ? 'cg-item' : 'cg-item mine';
         c.mine = !isBuying;
         c.sold = !isBuying;
-        tg?.showAlert("❌ Server Error: " + (r.error || 'Cartela purchase failed.'));
+        tg?.showAlert(r.error || 'Failed');
     } else {
-        // Update balance instantly
         balance = parseFloat(r.balance);
         document.getElementById('mainWallet').textContent = balance.toFixed(0);
         document.getElementById('playWallet').textContent = balance.toFixed(0);
-
-        myCount = cartelas.filter(x => x.mine).length;
-        const playContainer = document.getElementById('playBtnContainer');
-        if (myCount > 0) {
-            playContainer.style.display = 'block';
-            document.getElementById('myCartelaCount').textContent = myCount;
-        } else {
-            playContainer.style.display = 'none';
-        }
     }
 }
 
-function startCountdown(targetTime) {
-    if (timerInterval) clearInterval(timerInterval);
-    const timerEl = document.getElementById('timerVal');
-    if (!timerEl) return;
+// ═══ SUPABASE REALTIME WEBSOCKET ═══
+function listenToRealtime() {
+    // Listen to ALL inserts and deletes on the PlayerCartela table
+    const channel = supabase.channel('lobby-updates')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bingo_playercartela' },
+            (payload) => {
+                // When someone buys or releases a cartela, update the UI instantly
+                if (payload.eventType === 'INSERT') {
+                    const cartelaId = payload.new.cartela_id;
+                    const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
 
-    const updateTimer = () => {
-        const remain = Math.max(0, Math.round((targetTime - Date.now()) / 1000));
-        timerEl.textContent = remain + ' s';
+                    if (el && !el.classList.contains('mine')) {
+                        el.className = 'cg-item sold'; // Turn yellow
+                    }
+                }
+                else if (payload.eventType === 'DELETE') {
+                    const cartelaId = payload.old.cartela_id;
+                    const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
 
-        if (remain <= 0) {
-            clearInterval(timerInterval);
-            timerEl.textContent = 'Checking...';
-            // ✅ FIXED: Do NOT force a redirect here.
-            // The background sync (every 2 seconds) will check the API.
-            // If the game started, the API will return status: 'active' and redirect.
-            // If only 1 player, the API will return a new starts_at time (60s) and the timer resets!
-            loadCartelas(true);
-        }
-    };
-
-    updateTimer();
-    timerInterval = setInterval(updateTimer, 1000);
+                    if (el && !el.classList.contains('mine')) {
+                        el.className = 'cg-item'; // Turn black
+                    }
+                }
+            }
+        )
+        .subscribe();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadCartelas(false);
+    await loadCartelas();
+    listenToRealtime(); // ✅ Start WebSocket listener instead of polling!
 
-    // ⚡ FAST SYNC: Check for other players' purchases every 2 seconds
-    if (syncInterval) clearInterval(syncInterval);
-    syncInterval = setInterval(() => loadCartelas(true), 2000);
-
-    document.getElementById('refreshBtn')?.addEventListener('click', () => loadCartelas(false));
+    // Remove the setInterval polling entirely!
+    // syncInterval = setInterval(() => loadCartelas(true), 2000);
 
     document.getElementById('playGameBtn')?.addEventListener('click', () => {
         window.location.href = '/app/game/';

@@ -135,81 +135,48 @@ def list_cartelas(request):
 @csrf_exempt
 @webapp_auth_required
 @require_http_methods(["POST"])
+@csrf_exempt
+@webapp_auth_required
+@require_http_methods(["POST"])
 def toggle_cartela(request):
     try:
         body = json.loads(request.body or '{}')
         cartela_id = body.get('cartela_id')
-        if not cartela_id:
-            return _json({'ok': False, 'error': 'missing_cartela_id'}, 400)
-
         room = _get_room()
         user = request.tg_user
         stake_amount = Decimal(str(room.stake))
 
         with transaction.atomic():
-            round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by(
-                '-id').first()
+            round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
             if not round_obj:
-                return _json({'ok': False, 'error': 'Purchasing is closed. Game starting.'}, 400)
+                return _json({'ok': False, 'error': 'Game starting soon.'}, 400)
 
-            try:
-                c = Cartela.objects.get(id=cartela_id)
-            except Cartela.DoesNotExist:
+            c = Cartela.objects.filter(id=cartela_id).first()
+            if not c:
                 return _json({'ok': False, 'error': 'Cartela not found.'}, 404)
 
             existing = PlayerCartela.objects.filter(round=round_obj, user=user, cartela=c).first()
 
             if existing:
+                # Release Cartela
                 existing.delete()
-                c.is_sold = False
-                c.save()
-
                 user.balance += stake_amount
-                user.save()
-                Transaction.objects.create(user=user, amount=stake_amount, type='refund',
-                                           note=f"Released Cartela #{c.cartela_number}")
-
-                if hasattr(round_obj, 'recalculate_pool'):
-                    try:
-                        round_obj.recalculate_pool()
-                    except:
-                        pass
-
+                user.save(update_fields=['balance'])
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
             else:
+                # Buy Cartela
                 if PlayerCartela.objects.filter(round=round_obj, cartela=c).exists():
-                    return _json({'ok': False, 'error': 'Cartela already bought by someone else.'}, 400)
-
-                if user.balance < stake_amount:
-                    return _json({'ok': False, 'error': 'Insufficient balance.'}, 400)
-
-                c.is_sold = True
-                c.save()
+                    return _json({'ok': False, 'error': 'Already sold.'}, 400)
 
                 PlayerCartela.objects.create(
                     round=round_obj, user=user, cartela=c, marked_numbers=[]
                 )
-
                 user.balance -= stake_amount
-                user.save()
-                Transaction.objects.create(user=user, amount=-stake_amount, type='buy_cartela',
-                                           note=f"Bought Cartela #{c.cartela_number}")
-
-                if hasattr(round_obj, 'recalculate_pool'):
-                    try:
-                        round_obj.recalculate_pool()
-                    except:
-                        pass
-
-                if not round_obj.start_at:
-                    round_obj.start_at = timezone.now() + timedelta(seconds=60)
-                round_obj.save()
-
+                user.save(update_fields=['balance'])
                 return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
 
     except Exception as e:
-        traceback.print_exc()
-        return _json({'ok': False, 'error': f"Python Crash: {str(e)}"}, 500)
+        return _json({'ok': False, 'error': str(e)}, 500)
 
 
 @webapp_auth_required
