@@ -34,6 +34,12 @@ async function loadCartelas(isBackgroundSync = false) {
         return;
     }
 
+    // ✅ NEW: If the game status is active, redirect everyone to the game board immediately!
+    if (r.status === 'active') {
+        window.location.href = '/app/game/';
+        return;
+    }
+
     cartelas = r.cartelas || [];
     stake = parseFloat(r.room.stake);
     balance = parseFloat(r.my_balance);
@@ -159,13 +165,12 @@ function startCountdown(targetTime) {
 
         if (remain <= 0) {
             clearInterval(timerInterval);
-            timerEl.textContent = '0 s';
-
-            // ⚡ When timer hits 0, check if the game started.
-            // If not (only 1 player), the backend resets to 60s and the background sync will catch it.
-            if (myCount > 0) {
-                window.location.href = '/app/game/';
-            }
+            timerEl.textContent = 'Checking...';
+            // ✅ FIXED: Do NOT force a redirect here.
+            // The background sync (every 2 seconds) will check the API.
+            // If the game started, the API will return status: 'active' and redirect.
+            // If only 1 player, the API will return a new starts_at time (60s) and the timer resets!
+            loadCartelas(true);
         }
     };
 
@@ -176,9 +181,9 @@ function startCountdown(targetTime) {
 document.addEventListener('DOMContentLoaded', async () => {
     await loadCartelas(false);
 
-    // ⚡ Background Sync: Check for other players' purchases every 3 seconds
+    // ⚡ FAST SYNC: Check for other players' purchases every 2 seconds
     if (syncInterval) clearInterval(syncInterval);
-    syncInterval = setInterval(() => loadCartelas(true), 3000);
+    syncInterval = setInterval(() => loadCartelas(true), 2000);
 
     document.getElementById('refreshBtn')?.addEventListener('click', () => loadCartelas(false));
 
