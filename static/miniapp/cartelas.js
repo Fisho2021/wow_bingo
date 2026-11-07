@@ -5,14 +5,25 @@ if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#0d111a'); }
 
 let cartelas = [], stake = 0, balance = 0, myCount = 0;
 let timerInterval = null;
+let syncInterval = null;
 
+// ⚠️ REPLACE THESE WITH YOUR ACTUAL SUPABASE CREDENTIALS
+const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
-const SUPABASE_URL = 'https://pneyxzpsritncwybeptx.supabase.co';
-const SUPABASE_ANON_KEY = 'pneyxzpsritncwybeptx';
-// Initialize Supabase Client for Realtime
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
 
-// ✅ Correct Authorization header for Django API
+// ✅ Safe Initialization (Prevents crashes if script is missing)
+try {
+    if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } else {
+        console.warn("⚠️ Supabase script not found in HTML. Falling back to polling.");
+    }
+} catch (e) {
+    console.error("⚠️ Supabase failed to initialize:", e);
+}
+
 async function api(path, opts = {}) {
     const initData = window.Telegram?.WebApp?.initData || '';
     const headers = {
@@ -31,15 +42,22 @@ async function api(path, opts = {}) {
 }
 
 async function loadCartelas(isBackgroundSync = false) {
+    const grid = document.getElementById('cartelaGrid');
+
+    // Show loading state only on first load
+    if (!isBackgroundSync && grid) {
+        grid.innerHTML = '<div class="loader" style="grid-column: span 8; text-align: center; color: white; padding: 20px;">Loading Cartelas...</div>';
+    }
+
     const r = await api('/api/cartelas/');
+
     if (!r.ok) {
-        if (!isBackgroundSync) {
-            document.getElementById('cartelaGrid').innerHTML = `<div class="loader" style="color:red; grid-column: span 8;">Error: ${r.error}</div>`;
+        if (grid && !isBackgroundSync) {
+            grid.innerHTML = `<div class="loader" style="color:#e74c3c; grid-column: span 8; text-align: center; padding: 20px;">Error: ${r.error}</div>`;
         }
         return;
     }
 
-    // ✅ Redirect immediately if the game is active
     if (r.status === 'active') {
         window.location.href = '/app/game/';
         return;
@@ -51,17 +69,19 @@ async function loadCartelas(isBackgroundSync = false) {
     myCount = cartelas.filter(c => c.mine).length;
 
     // Update Wallets
-    document.getElementById('mainWallet').textContent = balance.toFixed(0);
-    document.getElementById('playWallet').textContent = balance.toFixed(0);
-    document.getElementById('stakeVal').textContent = stake.toFixed(0);
+    if(document.getElementById('mainWallet')) document.getElementById('mainWallet').textContent = balance.toFixed(0);
+    if(document.getElementById('playWallet')) document.getElementById('playWallet').textContent = balance.toFixed(0);
+    if(document.getElementById('stakeVal')) document.getElementById('stakeVal').textContent = stake.toFixed(0);
 
     // Show/Hide Play Button
     const playContainer = document.getElementById('playBtnContainer');
-    if (myCount > 0) {
-        playContainer.style.display = 'block';
-        document.getElementById('myCartelaCount').textContent = myCount;
-    } else {
-        playContainer.style.display = 'none';
+    if (playContainer) {
+        if (myCount > 0) {
+            playContainer.style.display = 'block';
+            if(document.getElementById('myCartelaCount')) document.getElementById('myCartelaCount').textContent = myCount;
+        } else {
+            playContainer.style.display = 'none';
+        }
     }
 
     // ⏱️ Handle Timer
@@ -72,9 +92,8 @@ async function loadCartelas(isBackgroundSync = false) {
         if (timerInterval) clearInterval(timerInterval);
     }
 
-    // 🎨 Render Grid (First Load Only)
-    if (!isBackgroundSync) {
-        const grid = document.getElementById('cartelaGrid');
+    // 🎨 Render Grid
+    if (grid && !isBackgroundSync) {
         grid.innerHTML = cartelas.map(c => {
             let cls = 'cg-item';
             if (c.mine) cls += ' mine';
@@ -85,6 +104,16 @@ async function loadCartelas(isBackgroundSync = false) {
         grid.querySelectorAll('.cg-item').forEach(el => {
             el.addEventListener('click', () => handleCartelaClick(parseInt(el.dataset.id), el));
         });
+    } else if (grid && isBackgroundSync) {
+        cartelas.forEach(c => {
+            const el = document.querySelector(`.cg-item[data-id="${c.id}"]`);
+            if (!el) return;
+            const isMineNow = el.classList.contains('mine');
+            const isSoldNow = el.classList.contains('sold');
+            if (c.mine && !isMineNow) el.className = 'cg-item mine';
+            else if (c.sold && !c.mine && !isSoldNow) el.className = 'cg-item sold';
+            else if (!c.sold && !c.mine && (isMineNow || isSoldNow)) el.className = 'cg-item';
+        });
     }
 }
 
@@ -92,50 +121,42 @@ async function handleCartelaClick(id, element) {
     const c = cartelas.find(x => x.id === id);
     if (!c) return;
 
-    // 1. IF SOLD TO SOMEONE ELSE, BLOCK
     if (c.sold && !c.mine) {
-        tg?.showAlert("❌ This cartela is already sold. Please choose another one.");
+        tg?.showAlert("❌ This cartela is already sold.");
         return;
     }
 
-    // 2. ⚡ INSTANT OPTIMISTIC UI (No lag)
+    // ⚡ INSTANT OPTIMISTIC UI
     const isBuying = !c.mine;
-    if (isBuying) {
-        element.className = 'cg-item mine';
-    } else {
-        element.className = 'cg-item';
-    }
+    element.className = isBuying ? 'cg-item mine' : 'cg-item';
     c.mine = isBuying;
     c.sold = isBuying;
-
     tg?.HapticFeedback?.impactOccurred('light');
 
-    // 3. Send to backend
     const r = await api('/api/cartelas/toggle/', {
         method: 'POST',
         body: JSON.stringify({ cartela_id: id }),
     });
 
     if (!r.ok) {
-        // Revert on failure
-        if (isBuying) element.className = 'cg-item';
-        else element.className = 'cg-item mine';
+        element.className = isBuying ? 'cg-item' : 'cg-item mine';
         c.mine = !isBuying;
         c.sold = !isBuying;
-        tg?.showAlert("❌ Server Error: " + (r.error || 'Cartela purchase failed.'));
+        tg?.showAlert("❌ Server Error: " + (r.error || 'Purchase failed.'));
     } else {
-        // Update balance instantly
         balance = parseFloat(r.balance);
-        document.getElementById('mainWallet').textContent = balance.toFixed(0);
-        document.getElementById('playWallet').textContent = balance.toFixed(0);
-
+        if(document.getElementById('mainWallet')) document.getElementById('mainWallet').textContent = balance.toFixed(0);
+        if(document.getElementById('playWallet')) document.getElementById('playWallet').textContent = balance.toFixed(0);
         myCount = cartelas.filter(x => x.mine).length;
+
         const playContainer = document.getElementById('playBtnContainer');
-        if (myCount > 0) {
-            playContainer.style.display = 'block';
-            document.getElementById('myCartelaCount').textContent = myCount;
-        } else {
-            playContainer.style.display = 'none';
+        if (playContainer) {
+            if (myCount > 0) {
+                playContainer.style.display = 'block';
+                if(document.getElementById('myCartelaCount')) document.getElementById('myCartelaCount').textContent = myCount;
+            } else {
+                playContainer.style.display = 'none';
+            }
         }
     }
 }
@@ -148,11 +169,9 @@ function startCountdown(targetTime) {
     const updateTimer = () => {
         const remain = Math.max(0, Math.round((targetTime - Date.now()) / 1000));
         timerEl.textContent = remain + ' s';
-
         if (remain <= 0) {
             clearInterval(timerInterval);
             timerEl.textContent = 'Checking...';
-            // Check API immediately when timer hits 0
             loadCartelas(true);
         }
     };
@@ -161,55 +180,38 @@ function startCountdown(targetTime) {
     timerInterval = setInterval(updateTimer, 1000);
 }
 
-// ═══ SUPABASE REALTIME WEBSOCKET LISTENER ═══
+// ═══ SUPABASE REALTIME LISTENER (If Available) ═══
 function listenToRealtime() {
-    console.log("Connecting to Supabase Realtime...");
+    if (!supabase) {
+        console.log("Using fallback polling for cartela updates.");
+        return;
+    }
 
-    const channel = supabase.channel('lobby-updates')
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'bingo_playercartela' },
-            (payload) => {
-                // When another player buys a cartela
-                if (payload.eventType === 'INSERT') {
-                    const cartelaId = payload.new.cartela_id;
-                    const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
-
-                    // If we haven't already marked it as ours, turn it yellow
-                    if (el && !el.classList.contains('mine')) {
-                        el.className = 'cg-item sold';
-                    }
-                }
-                // When a player releases a cartela
-                else if (payload.eventType === 'DELETE') {
-                    const cartelaId = payload.old.cartela_id;
-                    const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
-
-                    if (el && !el.classList.contains('mine')) {
-                        el.className = 'cg-item'; // Back to black
-                    }
-                }
+    supabase.channel('lobby-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_playercartela' }, (payload) => {
+            if (payload.eventType === 'INSERT') {
+                const cartelaId = payload.new.cartela_id;
+                const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
+                if (el && !el.classList.contains('mine')) el.className = 'cg-item sold';
+            } else if (payload.eventType === 'DELETE') {
+                const cartelaId = payload.old.cartela_id;
+                const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
+                if (el && !el.classList.contains('mine')) el.className = 'cg-item';
             }
-        )
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                console.log("✅ Realtime connected!");
-            }
-        });
+        })
+        .subscribe();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadCartelas(false);
 
-    // ⚡ Start the WebSocket listener instead of polling!
     listenToRealtime();
 
-    // We still need a slow background sync to check the timer / game status
-    // every 5 seconds, but we removed the fast 2-second sync for cartelas!
-    setInterval(() => loadCartelas(true), 5000);
+    // ✅ Fallback Polling: Every 3 seconds check for updates anyway (just in case Realtime misses one)
+    if (syncInterval) clearInterval(syncInterval);
+    syncInterval = setInterval(() => loadCartelas(true), 3000);
 
     document.getElementById('refreshBtn')?.addEventListener('click', () => loadCartelas(false));
-
     document.getElementById('playGameBtn')?.addEventListener('click', () => {
         window.location.href = '/app/game/';
     });
