@@ -103,10 +103,8 @@ def list_cartelas(request):
         next_num = (last.round_number + 1) if last else 1
         round_obj = GameRound.objects.create(
             round_number=next_num, room_id=room.id, entry_fee=room.stake,
-            status='waiting', start_at=None # ✅ Do not start timer until someone buys
+            status='waiting', start_at=None  # ✅ Do not start timer until someone buys
         )
-
-    # ✅ FIX: DO NOT force start_at here. Let toggle_cartela handle it.
 
     current_players = PlayerCartela.objects.filter(round=round_obj).select_related('cartela', 'user')
     sold_numbers = {p.cartela.cartela_number for p in current_players}
@@ -128,7 +126,7 @@ def list_cartelas(request):
     return _json({
         'ok': True, 'room': {'stake': str(room.stake)},
         'starts_at': round_obj.start_at.isoformat() if round_obj.start_at else None,
-        'status': round_obj.status, # ✅ ADDED: Send status so JS knows when to redirect
+        'status': round_obj.status,
         'cartelas': cartelas_data,
         'my_balance': str(request.tg_user.balance),
     })
@@ -149,7 +147,8 @@ def toggle_cartela(request):
         stake_amount = Decimal(str(room.stake))
 
         with transaction.atomic():
-            round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by('-id').first()
+            round_obj = GameRound.objects.select_for_update().filter(room=room, status='waiting').order_by(
+                '-id').first()
             if not round_obj:
                 return _json({'ok': False, 'error': 'Purchasing is closed. Game starting.'}, 400)
 
@@ -171,8 +170,10 @@ def toggle_cartela(request):
                                            note=f"Released Cartela #{c.cartela_number}")
 
                 if hasattr(round_obj, 'recalculate_pool'):
-                    try: round_obj.recalculate_pool()
-                    except: pass
+                    try:
+                        round_obj.recalculate_pool()
+                    except:
+                        pass
 
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
             else:
@@ -195,10 +196,11 @@ def toggle_cartela(request):
                                            note=f"Bought Cartela #{c.cartela_number}")
 
                 if hasattr(round_obj, 'recalculate_pool'):
-                    try: round_obj.recalculate_pool()
-                    except: pass
+                    try:
+                        round_obj.recalculate_pool()
+                    except:
+                        pass
 
-                # ✅ FIX: Start the 60s timer on the very first purchase
                 if not round_obj.start_at:
                     round_obj.start_at = timezone.now() + timedelta(seconds=60)
                 round_obj.save()
@@ -233,7 +235,6 @@ def game_state(request):
             waiting.last_draw_at = timezone.now() - timedelta(seconds=DRAW_INTERVAL_SECONDS + 1)
             waiting.save()
         else:
-            # ✅ RESET TIMER IF LESS THAN 2 PLAYERS
             waiting.start_at = timezone.now() + timedelta(seconds=60)
             waiting.save()
 
@@ -277,14 +278,19 @@ def game_state(request):
         users = TelegramUser.objects.filter(telegram_id__in=unique_user_ids)
         players_list = [(u.nickname or u.first_name) for u in users]
 
-        called = set(round_obj.called_numbers or [])
+        # ✅ FIXED: Force called numbers to integers
+        called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
+
         for p in current_players:
             if p.user.telegram_id == request.tg_user.telegram_id:
-                marked = set(p.marked_numbers or [])
+                # ✅ FIXED: Force marked numbers to integers
+                marked = {int(n) for n in (p.marked_numbers or []) if n is not None}
 
+                # ✅ FIXED: Force cartela numbers to integers for detect_line
                 try:
-                    line = detect_line(p.cartela.numbers, marked & called)
-                    line_nums = list(line_numbers(p.cartela.numbers, line)) if line else []
+                    cartela_nums_int = [[int(n) for n in row] for row in p.cartela.numbers]
+                    line = detect_line(cartela_nums_int, marked & called)
+                    line_nums = list(line_numbers(cartela_nums_int, line)) if line else []
                 except Exception as e:
                     print(f"⚠️ Line detection error in game_state: {e}")
                     line = False
@@ -318,7 +324,8 @@ def game_state(request):
         'round': {
             'number': round_obj.round_number if round_obj else None,
             'status': round_obj.status if round_obj else 'idle',
-            'called_numbers': round_obj.called_numbers if round_obj else [],
+            'called_numbers': [int(n) for n in
+                               round_obj.called_numbers] if round_obj and round_obj.called_numbers else [],
             'players': len(unique_user_ids) if round_obj else 0,
             'players_list': players_list,
             'start_at': round_obj.start_at.isoformat() if round_obj and round_obj.start_at else None,
@@ -342,30 +349,42 @@ def toggle_mark(request, player_id):
     body = json.loads(request.body or '{}')
     number = body.get('number')
 
+    if number is None:
+        return _json({'ok': False, 'error': 'missing_number'}, 400)
+
+    try:
+        number = int(number)
+    except (ValueError, TypeError):
+        return _json({'ok': False, 'error': 'invalid_number'}, 400)
+
     room = _get_room()
     round_obj = GameRound.objects.filter(room=room, status__in=['active', 'waiting']).order_by('-id').first()
     if not round_obj:
         return _json({'ok': False, 'error': 'no_active_game'}, 400)
 
-    called = set(round_obj.called_numbers or [])
+    called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
+
     if number not in called:
         return _json({'ok': False, 'error': 'not_called_yet'}, 400)
 
     my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
     updated = False
     for pc in my_pcs:
-        flat = [n for row in pc.cartela.numbers for n in row]
+        flat = [int(n) for row in pc.cartela.numbers for n in row]
         if number not in flat:
             continue
-        marked = set(pc.marked_numbers or [])
+
+        marked = {int(n) for n in (pc.marked_numbers or [])}
         if number in marked:
             continue
+
         marked.add(number)
         pc.marked_numbers = list(marked)
 
         try:
-            line = detect_line(pc.cartela.numbers, marked)
-            pc.line_numbers = list(line_numbers(pc.cartela.numbers, line)) if line else []
+            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+            line = detect_line(cartela_nums_int, marked)
+            pc.line_numbers = list(line_numbers(cartela_nums_int, line)) if line else []
         except Exception as e:
             print(f"⚠️ Line detection error in toggle_mark: {e}")
             pc.line_numbers = []
@@ -393,12 +412,17 @@ def claim_bingo(request):
         if not my_pcs.exists():
             return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
-        called = set(round_obj.called_numbers or [])
+        # ✅ FIXED: Force called numbers to integers
+        called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
         has_valid_bingo = False
 
         for pc in my_pcs:
             try:
-                if detect_line(pc.cartela.numbers, set(pc.marked_numbers) & called):
+                # ✅ FIXED: Force marked and cartela numbers to integers
+                marked = {int(n) for n in (pc.marked_numbers or []) if n is not None}
+                cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+
+                if detect_line(cartela_nums_int, marked & called):
                     has_valid_bingo = True
                     break
             except Exception as e:
@@ -440,7 +464,8 @@ def scores(request):
 @webapp_auth_required
 def history(request):
     u = request.tg_user
-    my_participations = PlayerCartela.objects.filter(user=u).select_related('round', 'cartela').order_by('-round__id')[:50]
+    my_participations = PlayerCartela.objects.filter(user=u).select_related('round', 'cartela').order_by('-round__id')[
+        :50]
 
     data = []
     for p in my_participations:
@@ -683,7 +708,6 @@ def _settle_round(round_obj, winners):
         Transaction.objects.create(user=user, amount=pool, type='win', note=f"Round #{round_obj.round_number} winner")
 
     elif len(ordered) >= 2:
-        # 60% to first winner
         pc_first = ordered[0]
         user_first = pc_first.user
         share_first = pool * Decimal('0.60')
@@ -695,7 +719,6 @@ def _settle_round(round_obj, winners):
         Transaction.objects.create(user=user_first, amount=share_first, type='win',
                                    note=f"Round #{round_obj.round_number} first winner (60%)")
 
-        # Distribute the 40%
         remaining_winners = ordered[1:]
         rest_pool = pool * Decimal('0.40')
         rest_share = rest_pool / len(remaining_winners)
@@ -716,17 +739,16 @@ def _schedule_next_round(room):
     if GameRound.objects.filter(room=room, status='waiting').exists():
         return
 
-    Cartela.objects.all().update(is_sold=False)  # Reset cards
+    Cartela.objects.all().update(is_sold=False)
     last = GameRound.objects.order_by('-round_number').first()
     next_num = (last.round_number + 1) if last else 1
 
-    # ✅ FIXED: Included all required fields for creating a new round
     GameRound.objects.create(
         room=room,
         round_number=next_num,
         entry_fee=room.stake,
         status='waiting',
-        start_at=None # ✅ Timer will start when the first player buys a card
+        start_at=None
     )
 
 
