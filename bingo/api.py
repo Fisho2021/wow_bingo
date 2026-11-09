@@ -131,10 +131,6 @@ def list_cartelas(request):
         'my_balance': str(request.tg_user.balance),
     })
 
-
-@csrf_exempt
-@webapp_auth_required
-@require_http_methods(["POST"])
 @csrf_exempt
 @webapp_auth_required
 @require_http_methods(["POST"])

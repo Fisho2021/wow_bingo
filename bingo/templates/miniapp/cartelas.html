@@ -26,10 +26,7 @@
         <div class="w-val" id="timerVal" style="color: #333;">0 s</div>
     </div>
 </div>
-<head>
-    <!-- ... other tags ... -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
+
 <!-- CARTELA GRID -->
 <div class="cartela-grid" id="cartelaGrid">
     <!-- JS will inject the 200 cartelas here -->
@@ -42,6 +39,9 @@
     </button>
 </div>
 
-<!-- ✅ CRITICAL FIX: Bumped version to v=300 to clear Telegram's cache -->
-<script src="/static/miniapp/cartelas.js?v=310"></script>
+<!-- ✅ 1. LOAD SUPABASE SDK FIRST -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- ✅ 2. LOAD YOUR JS (Bumped version to v=1000) -->
+<script src="/static/miniapp/cartelas.js?v=1000"></script>
 {% endblock %}
