@@ -8,20 +8,27 @@ let timerInterval = null;
 let syncInterval = null;
 
 // ⚠️ REPLACE THESE WITH YOUR ACTUAL SUPABASE CREDENTIALS
-const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://pneyxzpsritncwybeptx.supabase.co';
+const SUPABASE_ANON_KEY = 'pneyxzpsritncwybeptx';
 
 let supabase = null;
 
-// ✅ Safe Initialization (Prevents crashes if script is missing)
+// ✅ Safe Initialization with debugging alerts
 try {
     if (window.supabase) {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        if (SUPABASE_URL.includes('YOUR_PROJECT_REF') || SUPABASE_ANON_KEY.includes('YOUR_SUPABASE')) {
+            // Show alert if they forgot to put real credentials
+            setTimeout(() => alert("⚠️ Supabase Keys are still placeholders! Realtime is disabled, falling back to fast polling."), 1000);
+        } else {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("✅ Supabase initialized successfully.");
+        }
     } else {
-        console.warn("⚠️ Supabase script not found in HTML. Falling back to polling.");
+        console.warn("⚠️ Supabase script not found in HTML. Using fast polling.");
     }
 } catch (e) {
-    console.error("⚠️ Supabase failed to initialize:", e);
+    console.error("Supabase Error:", e);
+    setTimeout(() => alert("❌ Supabase Error: " + e.message), 1000);
 }
 
 async function api(path, opts = {}) {
@@ -44,7 +51,7 @@ async function api(path, opts = {}) {
 async function loadCartelas(isBackgroundSync = false) {
     const grid = document.getElementById('cartelaGrid');
 
-    // Show loading state only on first load
+    // Show loading text
     if (!isBackgroundSync && grid) {
         grid.innerHTML = '<div class="loader" style="grid-column: span 8; text-align: center; color: white; padding: 20px;">Loading Cartelas...</div>';
     }
@@ -94,6 +101,11 @@ async function loadCartelas(isBackgroundSync = false) {
 
     // 🎨 Render Grid
     if (grid && !isBackgroundSync) {
+        if (cartelas.length === 0) {
+            grid.innerHTML = '<div class="loader" style="grid-column: span 8; text-align: center; color: white; padding: 20px;">No cartelas available. Please refresh.</div>';
+            return;
+        }
+
         grid.innerHTML = cartelas.map(c => {
             let cls = 'cg-item';
             if (c.mine) cls += ' mine';
@@ -182,10 +194,7 @@ function startCountdown(targetTime) {
 
 // ═══ SUPABASE REALTIME LISTENER (If Available) ═══
 function listenToRealtime() {
-    if (!supabase) {
-        console.log("Using fallback polling for cartela updates.");
-        return;
-    }
+    if (!supabase) return;
 
     supabase.channel('lobby-updates')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_playercartela' }, (payload) => {
@@ -207,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     listenToRealtime();
 
-    // ✅ Fallback Polling: Every 3 seconds check for updates anyway (just in case Realtime misses one)
+    // Fallback polling: Every 3 seconds, check anyway just in case
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => loadCartelas(true), 3000);
 
