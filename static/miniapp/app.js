@@ -265,9 +265,12 @@ async function refreshGame() {
 
 // ═══ MARKING NUMBERS ═══
 async function toggleMark(playerId, number) {
+    // ✅ FIX: Ensure the number is sent as an integer
+    const cleanNumber = parseInt(number);
+
     const r = await api(`/api/player/${playerId}/mark/`, {
         method: 'POST',
-        body: JSON.stringify({ number: number })
+        body: JSON.stringify({ number: cleanNumber })
     });
 
     if (r.ok) {

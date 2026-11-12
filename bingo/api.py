@@ -364,6 +364,66 @@ def toggle_mark(request, player_id):
 @csrf_exempt
 @webapp_auth_required
 @require_http_methods(["POST"])
+def toggle_mark(request, player_id):
+    try:
+        if int(player_id) != int(request.tg_user.telegram_id):
+            return _json({'ok': False, 'error': 'player_id_mismatch'}, 403)
+    except (TypeError, ValueError):
+        return _json({'ok': False, 'error': 'invalid_player_id'}, 400)
+
+    body = json.loads(request.body or '{}')
+    number = body.get('number')
+
+    if number is None:
+        return _json({'ok': False, 'error': 'missing_number'}, 400)
+
+    room = _get_room()
+    round_obj = GameRound.objects.filter(room=room, status__in=['active', 'waiting']).order_by('-id').first()
+    if not round_obj:
+        return _json({'ok': False, 'error': 'no_active_game'}, 400)
+
+    # ✅ FIX 1: Convert all called numbers to strings for comparison
+    called_str = {str(n).strip() for n in (round_obj.called_numbers or []) if n is not None}
+
+    if str(number).strip() not in called_str:
+        return _json({'ok': False, 'error': 'not_called_yet'}, 400)
+
+    my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
+    updated = False
+    for pc in my_pcs:
+        # ✅ FIX 2: Convert cartela numbers to strings
+        flat_str = [str(n).strip() for row in pc.cartela.numbers for n in row]
+        if str(number).strip() not in flat_str:
+            continue
+
+        # Convert everything to int for detect_line
+        marked_int = {int(n) for n in (pc.marked_numbers or []) if str(n).isdigit()}
+        if int(number) in marked_int:
+            continue
+
+        marked_int.add(int(number))
+        pc.marked_numbers = list(marked_int)
+
+        try:
+            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+            line = detect_line(cartela_nums_int, marked_int)
+            pc.line_numbers = list(line_numbers(cartela_nums_int, line)) if line else []
+        except Exception as e:
+            print(f"⚠️ Line detection error in toggle_mark: {e}")
+            pc.line_numbers = []
+
+        pc.save(update_fields=['marked_numbers', 'line_numbers'])
+        updated = True
+
+    if not updated:
+        return _json({'ok': False, 'error': 'already_marked_or_not_found'}, 400)
+
+    return _json({'ok': True})
+
+
+@csrf_exempt
+@webapp_auth_required
+@require_http_methods(["POST"])
 def claim_bingo(request):
     room = _get_room()
     with transaction.atomic():
@@ -373,20 +433,34 @@ def claim_bingo(request):
 
         my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
         if not my_pcs.exists():
-            return _json({'ok': False, 'error': 'You are not a player in this round.'}, 400)
+            return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
-        called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
+        # ✅ FIX: Convert called numbers to a set of integers
+        called_int = set()
+        for n in (round_obj.called_numbers or []):
+            try:
+                called_int.add(int(n))
+            except:
+                pass
+
         has_valid_bingo = False
-
         for pc in my_pcs:
-            marked = {int(n) for n in (pc.marked_numbers or []) if n is not None}
-            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+            try:
+                marked_int = set()
+                for n in (pc.marked_numbers or []):
+                    try:
+                        marked_int.add(int(n))
+                    except:
+                        pass
 
-            if detect_line(cartela_nums_int, marked & called):
-                has_valid_bingo = True
-                break
+                cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
 
-        # ✅ PUNISHMENT: False Bingo -> Delete their cartela (Turn into spectator)
+                if detect_line(cartela_nums_int, marked_int & called_int):
+                    has_valid_bingo = True
+                    break
+            except Exception as e:
+                print(f"⚠️ Bingo validation error: {e}")
+
         if not has_valid_bingo:
             my_pcs.delete()
             return _json({
@@ -395,7 +469,6 @@ def claim_bingo(request):
                 'message': 'You clicked BINGO without a valid line! You have been removed and are now a spectator.'
             }, 400)
 
-        # Valid Bingo! End the game.
         round_obj.status = 'finished'
         round_obj.finished_at = timezone.now()
         round_obj.save()
