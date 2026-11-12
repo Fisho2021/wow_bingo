@@ -1085,3 +1085,13 @@ body {
     cursor: default;
     box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
 }
+/* Spectator Mode Box */
+.spectator-box {
+    background: #232e3c;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    border: 2px solid #3a475a;
+    margin-top: 15px;
+    color: white;
+}

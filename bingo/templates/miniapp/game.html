@@ -39,14 +39,14 @@
         <div class="called-grid" id="calledGrid"></div>
     </div>
 
-    <!-- RIGHT SIDE: CURRENT CALL & MY CARTELAS -->
+    <!-- RIGHT SIDE: CURRENT CALL & MY CARTELAS / SPECTATOR MODE -->
     <div class="cartela-panel">
         <div class="current-call-box">
             <div class="cc-label">Current Call</div>
             <div class="cc-circle" id="currentCall">-</div>
         </div>
 
-        <!-- ✅ This container will hold all your 5x5 cartelas and their individual BINGO buttons -->
+        <!-- ✅ This container will hold your 5x5 cartelas OR the Spectator Mode box -->
         <div id="myCartelasContainer" style="margin-top: 15px; max-height: 500px; overflow-y: auto; padding-bottom: 20px;"></div>
     </div>
 </div>
@@ -84,7 +84,7 @@
             <div id="winnerGridContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;"></div>
         </div>
 
-        <!-- ✅ ADDED: Countdown Timer for Auto-Start -->
+        <!-- ✅ Countdown Timer for Auto-Start -->
         <p style="color: #a8a8b3; font-size: 11px; letter-spacing: 1px; margin-bottom: 8px;">
             STARTING IN <span id="modalCountdown" style="color: #e67e22; font-weight: bold;">5S</span>
         </p>
@@ -98,5 +98,8 @@
         </button>
     </div>
 </div>
+
+<!-- ✅ CRITICAL: Load app.js with cache buster -->
+<script src="/static/miniapp/app.js?v=888"></script>
 
 {% endblock %}

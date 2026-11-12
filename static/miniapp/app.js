@@ -33,17 +33,21 @@ function beep(freq = 660, duration = 0.12, type = 'sine') {
     } catch (e) { /* ignore */ }
 }
 
-function playCallSound() { beep(880, 0.15, 'sine'); setTimeout(() => beep(1100, 0.12, 'sine'), 100); }
+function playCallSound() {
+    beep(880, 0.15, 'sine');
+    setTimeout(() => beep(1100, 0.12, 'sine'), 100);
+}
+
 function playBingoSound() {
-    beep(660, 0.15); setTimeout(() => beep(880, 0.15), 150);
+    beep(660, 0.15);
+    setTimeout(() => beep(880, 0.15), 150);
     setTimeout(() => beep(1100, 0.3), 300);
 }
 
-// ✅ FIXED: Speak both Letter and Number (e.g., "B-12")
+// ✅ Speak both Letter and Number (e.g., "B-12")
 function speakAmharic(number) {
     if (!soundOn) return;
 
-    // Amharic numbers 1-75
     const amharicNumbers = {
         1:"አንድ",2:"ሁለት",3:"ሶስት",4:"አራት",5:"አምስት",6:"ስድስት",7:"ሰባት",8:"ስምንት",9:"ዘጠኝ",10:"አስር",
         11:"አስራ አንድ",12:"አስራ ሁለት",13:"አስራ ሶስት",14:"አስራ አራት",15:"አስራ አምስት",16:"አስራ ስድስት",17:"አስራ ሰባት",18:"አስራ ስምንት",19:"አስራ ዘጠኝ",20:"ሃያ",
@@ -55,7 +59,6 @@ function speakAmharic(number) {
         71:"ሰባ አንድ",72:"ሰባ ሁለት",73:"ሰባ ሶስት",74:"ሰባ አራት",75:"ሰባ አምስት"
     };
 
-    // Translate B-I-N-G-O to Amharic phonetics for perfect TTS pronunciation
     let amharicLetter = '';
     if (number <= 15) amharicLetter = 'ቢ';       // B
     else if (number <= 30) amharicLetter = 'አይ';  // I
@@ -66,10 +69,7 @@ function speakAmharic(number) {
     const numText = amharicNumbers[number];
     if (!numText) return;
 
-    // Combine Letter + Number (e.g., "ቢ አስራ ሁለት")
     const textToSpeak = `${amharicLetter} ${numText}`;
-
-    // Play via Google TTS
     const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textToSpeak)}&tl=am&client=tw-ob`;
     const audio = new Audio(audioUrl);
     audio.play().catch(e => console.log("Audio play failed:", e));
@@ -174,7 +174,7 @@ async function refreshGame() {
     // 🔊 Voice and Sound
     if (called.length > _lastCalledCount && _lastCalledCount > 0 && last) {
         playCallSound();
-        speakAmharic(last); // ✅ Speak the number in Amharic
+        speakAmharic(last);
         if (tg) tg.HapticFeedback.impactOccurred('light');
     }
     _lastCalledCount = called.length;
@@ -185,7 +185,6 @@ async function refreshGame() {
     if (document.getElementById('callVal')) document.getElementById('callVal').textContent = called.length;
     if (document.getElementById('prizeVal')) document.getElementById('prizeVal').textContent = roundData.prize_pool || '0';
 
-    // ✅ FIXED: Show Letter-Number (e.g., B-12) in the Current Call circle
     if (document.getElementById('currentCall')) {
         let lastDisplay = '-';
         if (last) {
@@ -220,14 +219,15 @@ async function refreshGame() {
             .join('');
     }
 
-    // ── 4. RENDER MULTIPLE CARTELAS + BINGO BUTTONS ──
+    // ── 4. RENDER MULTIPLE CARTELAS OR SPECTATOR MODE ──
     const cartelasContainer = document.getElementById('myCartelasContainer');
+
     if (r.my_cartelas && r.my_cartelas.length > 0) {
+        // ✅ USER IS A PLAYER
         cartelasContainer.innerHTML = r.my_cartelas.map(cartela => {
             const markedNums = cartela.marked || [];
             const flatNums = cartela.numbers.flat();
 
-            // ✅ Render cells + Center Star Logic
             const cellsHtml = flatNums.map((n, index) => {
                 if (index === 12) {
                     return `<div class="cell marked star">⭐</div>`;
@@ -252,7 +252,14 @@ async function refreshGame() {
             `;
         }).join('');
     } else if (cartelasContainer) {
-        cartelasContainer.innerHTML = '<div class="loader" style="color:white; text-align:center;">No cartela bought.</div>';
+        // 👀 USER IS A SPECTATOR (Didn't buy, or got punished)
+        cartelasContainer.innerHTML = `
+            <div style="background: #232e3c; border-radius: 12px; padding: 20px; text-align: center; border: 2px solid #3a475a; margin-top: 15px;">
+                <div style="font-size: 40px; margin-bottom: 10px;">👀</div>
+                <h3 style="color: #ffd166; margin-bottom: 5px;">Spectator Mode</h3>
+                <p style="color: #aaa; font-size: 14px;">You are watching this game. Wait for the next round to play!</p>
+            </div>
+        `;
     }
 }
 
@@ -275,17 +282,20 @@ async function toggleMark(playerId, number) {
     }
 }
 
-// ═══ CLAIM BINGO ═══
+// ═══ CLAIM BINGO & PUNISHMENT ═══
 async function claimBingo() {
     const r = await api('/api/bingo/', { method: 'POST' });
+
     if (r.ok) {
         playBingoSound();
         if (tg) tg.showAlert(`🎉 BINGO! Payout: ${JSON.stringify(r.payouts)}`);
     } else {
         beep(220, 0.3, 'square');
         if (tg) tg.showAlert(`❌ ${r.error === 'FALSE_BINGO' ? r.message : r.error}`);
+
+        // ✅ PUNISHMENT: If False Bingo, refresh immediately to show Spectator Mode
         if (r.error === 'FALSE_BINGO') {
-            setTimeout(() => window.location.href = '/app/', 2000);
+            setTimeout(() => refreshGame(), 1500);
         }
     }
 }

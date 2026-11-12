@@ -373,32 +373,29 @@ def claim_bingo(request):
 
         my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
         if not my_pcs.exists():
-            return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
+            return _json({'ok': False, 'error': 'You are not a player in this round.'}, 400)
 
-        # ✅ FIXED: Force called numbers to integers
         called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
         has_valid_bingo = False
 
         for pc in my_pcs:
-            try:
-                # ✅ FIXED: Force marked and cartela numbers to integers
-                marked = {int(n) for n in (pc.marked_numbers or []) if n is not None}
-                cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+            marked = {int(n) for n in (pc.marked_numbers or []) if n is not None}
+            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
 
-                if detect_line(cartela_nums_int, marked & called):
-                    has_valid_bingo = True
-                    break
-            except Exception as e:
-                print(f"⚠️ Bingo validation error: {e}")
+            if detect_line(cartela_nums_int, marked & called):
+                has_valid_bingo = True
+                break
 
+        # ✅ PUNISHMENT: False Bingo -> Delete their cartela (Turn into spectator)
         if not has_valid_bingo:
             my_pcs.delete()
             return _json({
                 'ok': False,
                 'error': 'FALSE_BINGO',
-                'message': 'You clicked BINGO without a valid line! You have been removed from the game.'
+                'message': 'You clicked BINGO without a valid line! You have been removed and are now a spectator.'
             }, 400)
 
+        # Valid Bingo! End the game.
         round_obj.status = 'finished'
         round_obj.finished_at = timezone.now()
         round_obj.save()

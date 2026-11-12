@@ -31,45 +31,27 @@ def draw_number(round_obj):
 
 
 def detect_line(cartela_numbers, marked_numbers):
-    """
-    Checks for valid Bingo lines: Horizontal, Vertical, Diagonal, or 4 Corners.
-    Returns a dictionary describing the line, or False if no line.
-    The center cell is automatically considered marked.
-    """
-    # Ensure the center cell (index 12) is ALWAYS marked
+    # Force center to be marked
     center_number = cartela_numbers[2][2]
     if center_number not in marked_numbers:
         marked_numbers.add(center_number)
 
-    # 1. Check Rows
-    for i, row in enumerate(cartela_numbers):
-        if all(num in marked_numbers for num in row):
-            return {'type': 'row', 'index': i}
+    # 1. Check Rows & Columns (Straight lines)
+    for i in range(5):
+        if all(cartela_numbers[i][j] in marked_numbers for j in range(5)): return True # Row
+        if all(cartela_numbers[j][i] in marked_numbers for j in range(5)): return True # Column
 
-    # 2. Check Columns
-    for col in range(5):
-        if all(cartela_numbers[row][col] in marked_numbers for row in range(5)):
-            return {'type': 'col', 'index': col}
-
-    # 3. Check Diagonals
+    # 2. Check Diagonals
     diag1 = [cartela_numbers[i][i] for i in range(5)]
-    diag2 = [cartela_numbers[i][4 - i] for i in range(5)]
+    diag2 = [cartela_numbers[i][4-i] for i in range(5)]
+    if all(num in marked_numbers for num in diag1): return True
+    if all(num in marked_numbers for num in diag2): return True
 
-    if all(num in marked_numbers for num in diag1):
-        return {'type': 'diag', 'which': 'main'}
-    if all(num in marked_numbers for num in diag2):
-        return {'type': 'diag', 'which': 'anti'}
-
-    # 4. Check 4 Corners
-    corners = [
-        cartela_numbers[0][0], cartela_numbers[0][4],
-        cartela_numbers[4][0], cartela_numbers[4][4]
-    ]
-    if all(num in marked_numbers for num in corners):
-        return {'type': 'corners'}
+    # 3. Check 4 Corners
+    corners = [cartela_numbers[0][0], cartela_numbers[0][4], cartela_numbers[4][0], cartela_numbers[4][4]]
+    if all(num in marked_numbers for num in corners): return True
 
     return False
-
 
 def line_numbers(grid, line):
     if not line:
