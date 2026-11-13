@@ -7,10 +7,10 @@ let cartelas = [], stake = 0, balance = 0, myCount = 0;
 let timerInterval = null;
 let syncInterval = null;
 
-// ⚠️ REPLACE THESE WITH YOUR SUPABASE URL AND ANON KEY
+// ⚠️ REPLACE THESE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY
+// Get them from: Supabase Dashboard → Project Settings → API
 const SUPABASE_URL = 'https://pneyxzpsritncwybeptx.supabase.co';
-const SUPABASE_ANON_KEY = 'pneyxzpsritncwybeptx';
-
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXl4enBzcml0bmN3eWJlcHR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODc3ODEsImV4cCI6MjEwOTI2Mzc4MX0.s4AxK1RWYHgKedUz3L1fh_essDmbc-JLWn7Od4fAY90'; // 👈 THIS MUST BE THE LONG JWT STRING
 
 let supabaseClient = null;
 
@@ -48,6 +48,7 @@ async function loadCartelas(isBackgroundSync = false) {
         return;
     }
 
+    // ✅ Uniformity: If game is active, force redirect to the game board
     if (r.status === 'active') {
         window.location.href = '/app/game/';
         return;
@@ -169,12 +170,14 @@ function startCountdown(targetTime) {
 // ═══ SUPABASE REALTIME SETUP ═══
 function initSupabase() {
     if (!window.supabase) {
-        console.warn("Supabase SDK not loaded. Using fallback.");
+        console.warn("Supabase SDK not loaded. Using fallback polling.");
         return;
     }
 
-    if (SUPABASE_URL.includes("YOUR_PROJECT_REF")) {
-        console.warn("Supabase keys are placeholders. Using fallback.");
+    // ✅ SAFETY CHECK: Ensure the anon key is valid (not just the project ref)
+    if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
+        console.error("❌ INVALID SUPABASE ANON KEY. Realtime disabled. Using fast polling instead.");
+        console.error("Please copy the anon key from Supabase Dashboard → Settings → API.");
         return;
     }
 
@@ -187,7 +190,6 @@ function initSupabase() {
                 if (payload.eventType === 'INSERT') {
                     const cartelaId = payload.new.cartela_id;
                     const el = document.querySelector(`.cg-item[data-id="${cartelaId}"]`);
-                    // Only turn yellow if it's not our own cartela
                     if (el && !el.classList.contains('mine')) {
                         el.className = 'cg-item sold';
                     }
@@ -208,15 +210,15 @@ function initSupabase() {
 
 // ═══ INITIALIZATION ═══
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Load the UI FIRST (Fixes the blank screen)
+    // 1. Load UI first
     await loadCartelas(false);
 
     // 2. Start Supabase Realtime
     initSupabase();
 
-    // 3. Fallback Polling (Just in case WebSocket drops) - Every 5 seconds
+    // 3. Fallback Polling: Every 3 seconds (faster than 5s for better UX)
     if (syncInterval) clearInterval(syncInterval);
-    syncInterval = setInterval(() => loadCartelas(true), 5000);
+    syncInterval = setInterval(() => loadCartelas(true), 3000);
 
     document.getElementById('refreshBtn')?.addEventListener('click', () => loadCartelas(false));
     document.getElementById('playGameBtn')?.addEventListener('click', () => {
