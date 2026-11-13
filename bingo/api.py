@@ -87,6 +87,19 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
+    # ✅ CRITICAL FIX: If an active game exists, force the frontend to redirect to the game.
+    # This ensures 100% uniformity. No one can stay in the lobby while a game is playing.
+    active_round = GameRound.objects.filter(room=room, status='active').first()
+    if active_round:
+        return _json({
+            'ok': True, 
+            'status': 'active', 
+            'room': {'stake': str(room.stake)},
+            'starts_at': None,
+            'cartelas': [],
+            'my_balance': str(request.tg_user.balance)
+        })
+
     cartela_count = Cartela.objects.count()
     if cartela_count > 200:
         ids_to_keep = list(Cartela.objects.order_by('cartela_number').values_list('id', flat=True)[:200])
@@ -155,13 +168,11 @@ def toggle_cartela(request):
             existing = PlayerCartela.objects.filter(round=round_obj, user=user, cartela=c).first()
 
             if existing:
-                # Release Cartela
                 existing.delete()
                 user.balance += stake_amount
                 user.save(update_fields=['balance'])
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
             else:
-                # Buy Cartela
                 if PlayerCartela.objects.filter(round=round_obj, cartela=c).exists():
                     return _json({'ok': False, 'error': 'Already sold.'}, 400)
 
@@ -171,7 +182,6 @@ def toggle_cartela(request):
                 user.balance -= stake_amount
                 user.save(update_fields=['balance'])
                 
-                # Start timer on first purchase
                 if not round_obj.start_at:
                     round_obj.start_at = timezone.now() + timedelta(seconds=60)
                     round_obj.save(update_fields=['start_at'])
@@ -212,9 +222,9 @@ def game_state(request):
     active_round = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
 
     if active_round:
-        # ✅ FIX: If players drop below 2 in an active game, end it immediately
         unique_players_in_active = PlayerCartela.objects.filter(round=active_round).values('user').distinct().count()
         
+        # ✅ FIX: If players drop below 2 in an active game, end it immediately
         if unique_players_in_active < 2:
             active_round.status = 'finished'
             active_round.finished_at = timezone.now()
@@ -335,7 +345,6 @@ def toggle_mark(request, player_id):
         return _json({'ok': False, 'error': 'invalid_number'}, 400)
 
     room = _get_room()
-    # ✅ CRITICAL FIX: ONLY look at the ACTIVE round, never the waiting one
     round_obj = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
     if not round_obj:
         return _json({'ok': False, 'error': 'no_active_game'}, 400)
@@ -418,7 +427,6 @@ def claim_bingo(request):
         if not has_valid_bingo:
             my_pcs.delete()
             
-            # ✅ FIX: If they were the last player, end the round
             if PlayerCartela.objects.filter(round=round_obj).values('user').distinct().count() < 2:
                 round_obj.status = 'finished'
                 round_obj.finished_at = timezone.now()
@@ -663,8 +671,9 @@ def _tick_room(room):
 
     active = GameRound.objects.filter(room=room, status='active').first()
     if active:
-        # ✅ FIX: End the game if players drop below 2
         unique_players_in_active = PlayerCartela.objects.filter(round=active).values('user').distinct().count()
+        
+        # ✅ FIX: End the game if players drop below 2
         if unique_players_in_active < 2:
             active.status = 'finished'
             active.finished_at = timezone.now()
@@ -759,4 +768,3 @@ def _schedule_next_round(room):
 @require_http_methods(["POST"])
 def redeem_coupon(request):
     return _json({'ok': False, 'error': 'Coupon system is currently disabled.'}, 400)
-    

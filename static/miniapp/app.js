@@ -128,6 +128,13 @@ async function refreshGame() {
     const called = roundData.called_numbers || [];
     const last = called.length > 0 ? called[called.length - 1] : null;
 
+    // ✅ CRITICAL FIX: Force uniformity. If the game is waiting or idle, redirect to the lobby.
+    if (roundData.status === 'waiting' || roundData.status === 'idle') {
+        if (pollTimer) clearInterval(pollTimer);
+        window.location.href = '/app/cartelas/';
+        return;
+    }
+
     // 🏆 1. CHECK FOR WINNER MODAL
     if (roundData.status === 'finished' && r.winners && r.winners.length > 0) {
         if (pollTimer) clearInterval(pollTimer);
@@ -232,7 +239,6 @@ async function refreshGame() {
                     return `<div class="cell marked star">⭐</div>`;
                 }
 
-                // ✅ CRITICAL FIX: Force number to Integer for comparison
                 const numInt = parseInt(n);
                 const isMarked = markedNums.includes(numInt);
                 const isCalled = called.includes(numInt);
