@@ -103,7 +103,7 @@ def list_cartelas(request):
         next_num = (last.round_number + 1) if last else 1
         round_obj = GameRound.objects.create(
             round_number=next_num, room_id=room.id, entry_fee=room.stake,
-            status='waiting', start_at=None  # ✅ Do not start timer until someone buys
+            status='waiting', start_at=None
         )
 
     current_players = PlayerCartela.objects.filter(round=round_obj).select_related('cartela', 'user')
@@ -130,6 +130,7 @@ def list_cartelas(request):
         'cartelas': cartelas_data,
         'my_balance': str(request.tg_user.balance),
     })
+
 
 @csrf_exempt
 @webapp_auth_required
@@ -169,9 +170,16 @@ def toggle_cartela(request):
                 )
                 user.balance -= stake_amount
                 user.save(update_fields=['balance'])
+                
+                # Start timer on first purchase
+                if not round_obj.start_at:
+                    round_obj.start_at = timezone.now() + timedelta(seconds=60)
+                    round_obj.save(update_fields=['start_at'])
+                    
                 return _json({'ok': True, 'action': 'purchased', 'balance': str(user.balance)})
 
     except Exception as e:
+        traceback.print_exc()
         return _json({'ok': False, 'error': str(e)}, 500)
 
 
@@ -204,26 +212,36 @@ def game_state(request):
     active_round = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
 
     if active_round:
-        now = timezone.now()
-        if not active_round.last_draw_at or (now - active_round.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
-            draw_number(active_round)
-            active_round.last_draw_at = now
-            active_round.save(update_fields=['called_numbers', 'last_draw_at'])
+        # ✅ FIX: If players drop below 2 in an active game, end it immediately
+        unique_players_in_active = PlayerCartela.objects.filter(round=active_round).values('user').distinct().count()
+        
+        if unique_players_in_active < 2:
+            active_round.status = 'finished'
+            active_round.finished_at = timezone.now()
+            active_round.save()
+            _schedule_next_round(room)
+            round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
+        else:
+            now = timezone.now()
+            if not active_round.last_draw_at or (now - active_round.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
+                draw_number(active_round)
+                active_round.last_draw_at = now
+                active_round.save(update_fields=['called_numbers', 'last_draw_at'])
 
-            try:
-                winners = find_winners(active_round)
-                if winners or len(active_round.called_numbers or []) >= 75:
-                    active_round.status = 'finished'
-                    active_round.finished_at = timezone.now()
-                    active_round.save()
+                try:
+                    winners = find_winners(active_round)
+                    if winners or len(active_round.called_numbers or []) >= 75:
+                        active_round.status = 'finished'
+                        active_round.finished_at = timezone.now()
+                        active_round.save()
 
-                    if winners:
-                        _settle_round(active_round, winners)
-                    _schedule_next_round(room)
-            except Exception as e:
-                print(f"⚠️ Auto winner check error: {e}")
+                        if winners:
+                            _settle_round(active_round, winners)
+                        _schedule_next_round(room)
+                except Exception as e:
+                    print(f"⚠️ Auto winner check error: {e}")
 
-        round_obj = GameRound.objects.filter(id=active_round.id).first()
+            round_obj = GameRound.objects.filter(id=active_round.id).first()
     else:
         recent_finished = GameRound.objects.filter(
             room=room, status='finished', finished_at__gte=timezone.now() - timedelta(seconds=60)
@@ -241,15 +259,12 @@ def game_state(request):
         users = TelegramUser.objects.filter(telegram_id__in=unique_user_ids)
         players_list = [(u.nickname or u.first_name) for u in users]
 
-        # ✅ FIXED: Force called numbers to integers
         called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
 
         for p in current_players:
             if p.user.telegram_id == request.tg_user.telegram_id:
-                # ✅ FIXED: Force marked numbers to integers
                 marked = {int(n) for n in (p.marked_numbers or []) if n is not None}
 
-                # ✅ FIXED: Force cartela numbers to integers for detect_line
                 try:
                     cartela_nums_int = [[int(n) for n in row] for row in p.cartela.numbers]
                     line = detect_line(cartela_nums_int, marked & called)
@@ -287,8 +302,7 @@ def game_state(request):
         'round': {
             'number': round_obj.round_number if round_obj else None,
             'status': round_obj.status if round_obj else 'idle',
-            'called_numbers': [int(n) for n in
-                               round_obj.called_numbers] if round_obj and round_obj.called_numbers else [],
+            'called_numbers': [int(n) for n in round_obj.called_numbers] if round_obj and round_obj.called_numbers else [],
             'players': len(unique_user_ids) if round_obj else 0,
             'players_list': players_list,
             'start_at': round_obj.start_at.isoformat() if round_obj and round_obj.start_at else None,
@@ -321,7 +335,8 @@ def toggle_mark(request, player_id):
         return _json({'ok': False, 'error': 'invalid_number'}, 400)
 
     room = _get_room()
-    round_obj = GameRound.objects.filter(room=room, status__in=['active', 'waiting']).order_by('-id').first()
+    # ✅ CRITICAL FIX: ONLY look at the ACTIVE round, never the waiting one
+    round_obj = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
     if not round_obj:
         return _json({'ok': False, 'error': 'no_active_game'}, 400)
 
@@ -337,7 +352,7 @@ def toggle_mark(request, player_id):
         if number not in flat:
             continue
 
-        marked = {int(n) for n in (pc.marked_numbers or [])}
+        marked = {int(n) for n in (pc.marked_numbers or []) if str(n).isdigit()}
         if number in marked:
             continue
 
@@ -347,66 +362,6 @@ def toggle_mark(request, player_id):
         try:
             cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
             line = detect_line(cartela_nums_int, marked)
-            pc.line_numbers = list(line_numbers(cartela_nums_int, line)) if line else []
-        except Exception as e:
-            print(f"⚠️ Line detection error in toggle_mark: {e}")
-            pc.line_numbers = []
-
-        pc.save(update_fields=['marked_numbers', 'line_numbers'])
-        updated = True
-
-    if not updated:
-        return _json({'ok': False, 'error': 'already_marked_or_not_found'}, 400)
-
-    return _json({'ok': True})
-
-
-@csrf_exempt
-@webapp_auth_required
-@require_http_methods(["POST"])
-def toggle_mark(request, player_id):
-    try:
-        if int(player_id) != int(request.tg_user.telegram_id):
-            return _json({'ok': False, 'error': 'player_id_mismatch'}, 403)
-    except (TypeError, ValueError):
-        return _json({'ok': False, 'error': 'invalid_player_id'}, 400)
-
-    body = json.loads(request.body or '{}')
-    number = body.get('number')
-
-    if number is None:
-        return _json({'ok': False, 'error': 'missing_number'}, 400)
-
-    room = _get_room()
-    round_obj = GameRound.objects.filter(room=room, status__in=['active', 'waiting']).order_by('-id').first()
-    if not round_obj:
-        return _json({'ok': False, 'error': 'no_active_game'}, 400)
-
-    # ✅ FIX 1: Convert all called numbers to strings for comparison
-    called_str = {str(n).strip() for n in (round_obj.called_numbers or []) if n is not None}
-
-    if str(number).strip() not in called_str:
-        return _json({'ok': False, 'error': 'not_called_yet'}, 400)
-
-    my_pcs = PlayerCartela.objects.filter(round=round_obj, user=request.tg_user)
-    updated = False
-    for pc in my_pcs:
-        # ✅ FIX 2: Convert cartela numbers to strings
-        flat_str = [str(n).strip() for row in pc.cartela.numbers for n in row]
-        if str(number).strip() not in flat_str:
-            continue
-
-        # Convert everything to int for detect_line
-        marked_int = {int(n) for n in (pc.marked_numbers or []) if str(n).isdigit()}
-        if int(number) in marked_int:
-            continue
-
-        marked_int.add(int(number))
-        pc.marked_numbers = list(marked_int)
-
-        try:
-            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
-            line = detect_line(cartela_nums_int, marked_int)
             pc.line_numbers = list(line_numbers(cartela_nums_int, line)) if line else []
         except Exception as e:
             print(f"⚠️ Line detection error in toggle_mark: {e}")
@@ -435,7 +390,6 @@ def claim_bingo(request):
         if not my_pcs.exists():
             return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
-        # ✅ FIX: Convert called numbers to a set of integers
         called_int = set()
         for n in (round_obj.called_numbers or []):
             try:
@@ -463,6 +417,14 @@ def claim_bingo(request):
 
         if not has_valid_bingo:
             my_pcs.delete()
+            
+            # ✅ FIX: If they were the last player, end the round
+            if PlayerCartela.objects.filter(round=round_obj).values('user').distinct().count() < 2:
+                round_obj.status = 'finished'
+                round_obj.finished_at = timezone.now()
+                round_obj.save()
+                _schedule_next_round(room)
+
             return _json({
                 'ok': False,
                 'error': 'FALSE_BINGO',
@@ -497,8 +459,7 @@ def scores(request):
 @webapp_auth_required
 def history(request):
     u = request.tg_user
-    my_participations = PlayerCartela.objects.filter(user=u).select_related('round', 'cartela').order_by('-round__id')[
-        :50]
+    my_participations = PlayerCartela.objects.filter(user=u).select_related('round', 'cartela').order_by('-round__id')[:50]
 
     data = []
     for p in my_participations:
@@ -702,21 +663,29 @@ def _tick_room(room):
 
     active = GameRound.objects.filter(room=room, status='active').first()
     if active:
-        now = timezone.now()
-        if not active.last_draw_at or (now - active.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
-            draw_number(active)
-            active.last_draw_at = now
-            active.save(update_fields=['called_numbers', 'last_draw_at'])
-
-        winners = find_winners(active)
-        if winners or len(active.called_numbers or []) >= 75:
+        # ✅ FIX: End the game if players drop below 2
+        unique_players_in_active = PlayerCartela.objects.filter(round=active).values('user').distinct().count()
+        if unique_players_in_active < 2:
             active.status = 'finished'
             active.finished_at = timezone.now()
             active.save()
-
-            if winners:
-                _settle_round(active, winners)
             _schedule_next_round(room)
+        else:
+            now = timezone.now()
+            if not active.last_draw_at or (now - active.last_draw_at).total_seconds() >= DRAW_INTERVAL_SECONDS:
+                draw_number(active)
+                active.last_draw_at = now
+                active.save(update_fields=['called_numbers', 'last_draw_at'])
+
+            winners = find_winners(active)
+            if winners or len(active.called_numbers or []) >= 75:
+                active.status = 'finished'
+                active.finished_at = timezone.now()
+                active.save()
+
+                if winners:
+                    _settle_round(active, winners)
+                _schedule_next_round(room)
 
 
 def _settle_round(round_obj, winners):
@@ -790,3 +759,4 @@ def _schedule_next_round(room):
 @require_http_methods(["POST"])
 def redeem_coupon(request):
     return _json({'ok': False, 'error': 'Coupon system is currently disabled.'}, 400)
+    

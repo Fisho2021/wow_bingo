@@ -148,7 +148,6 @@ async function refreshGame() {
         document.getElementById('winnerModal').style.display = 'flex';
         playBingoSound();
 
-        // ✅ Auto-start next game in 5 seconds
         let timeLeft = 5;
         const countdownEl = document.getElementById('modalCountdown');
         const progressBar = document.getElementById('modalProgressBar');
@@ -164,7 +163,7 @@ async function refreshGame() {
 
                 if (timeLeft <= 0) {
                     clearInterval(timer);
-                    window.location.href = '/app/cartelas/'; // Redirect to lobby
+                    window.location.href = '/app/cartelas/';
                 }
             }, 1000);
         }
@@ -233,14 +232,16 @@ async function refreshGame() {
                     return `<div class="cell marked star">⭐</div>`;
                 }
 
-                const isMarked = markedNums.includes(n);
-                const isCalled = called.includes(n);
+                // ✅ CRITICAL FIX: Force number to Integer for comparison
+                const numInt = parseInt(n);
+                const isMarked = markedNums.includes(numInt);
+                const isCalled = called.includes(numInt);
 
                 let cellClass = 'cell';
                 if (isMarked) cellClass += ' marked';
                 else if (isCalled) cellClass += ' called';
 
-                return `<div class="${cellClass}" onclick="toggleMark(${cartela.player_id}, ${n})">${n}</div>`;
+                return `<div class="${cellClass}" onclick="toggleMark(${cartela.player_id}, ${numInt})">${numInt}</div>`;
             }).join('');
 
             return `
@@ -252,7 +253,7 @@ async function refreshGame() {
             `;
         }).join('');
     } else if (cartelasContainer) {
-        // 👀 USER IS A SPECTATOR (Didn't buy, or got punished)
+        // 👀 USER IS A SPECTATOR
         cartelasContainer.innerHTML = `
             <div style="background: #232e3c; border-radius: 12px; padding: 20px; text-align: center; border: 2px solid #3a475a; margin-top: 15px;">
                 <div style="font-size: 40px; margin-bottom: 10px;">👀</div>
@@ -265,7 +266,6 @@ async function refreshGame() {
 
 // ═══ MARKING NUMBERS ═══
 async function toggleMark(playerId, number) {
-    // ✅ FIX: Ensure the number is sent as an integer
     const cleanNumber = parseInt(number);
 
     const r = await api(`/api/player/${playerId}/mark/`, {
@@ -296,7 +296,6 @@ async function claimBingo() {
         beep(220, 0.3, 'square');
         if (tg) tg.showAlert(`❌ ${r.error === 'FALSE_BINGO' ? r.message : r.error}`);
 
-        // ✅ PUNISHMENT: If False Bingo, refresh immediately to show Spectator Mode
         if (r.error === 'FALSE_BINGO') {
             setTimeout(() => refreshGame(), 1500);
         }
