@@ -128,56 +128,61 @@ async function refreshGame() {
     const called = roundData.called_numbers || [];
     const last = called.length > 0 ? called[called.length - 1] : null;
 
-    // ✅ CRITICAL FIX: Force uniformity. If the game is waiting or idle, redirect to the lobby.
+    // ✅ 1. UNIFORMITY: If the game is waiting or idle, kick everyone to the lobby
     if (roundData.status === 'waiting' || roundData.status === 'idle') {
         if (pollTimer) clearInterval(pollTimer);
         window.location.href = '/app/cartelas/';
         return;
     }
 
-    // 🏆 1. CHECK FOR WINNER MODAL
-    if (roundData.status === 'finished' && r.winners && r.winners.length > 0) {
+    // 🏆 2. WINNER MODAL & 5-SECOND REDIRECT
+    if (roundData.status === 'finished') {
         if (pollTimer) clearInterval(pollTimer);
-        const winner = r.winners[0];
+        
+        if (r.winners && r.winners.length > 0) {
+            const winner = r.winners[0];
+            document.getElementById('winnerName').textContent = winner.name;
+            document.getElementById('winnerCartelaNum').textContent = winner.cartela_number;
 
-        document.getElementById('winnerName').textContent = winner.name;
-        document.getElementById('winnerCartelaNum').textContent = winner.cartela_number;
+            const gridContainer = document.getElementById('winnerGridContainer');
+            const flatNums = winner.numbers.flat();
+            const markedNums = winner.marked_numbers || [];
 
-        const gridContainer = document.getElementById('winnerGridContainer');
-        const flatNums = winner.numbers.flat();
-        const markedNums = winner.marked_numbers || [];
+            gridContainer.innerHTML = flatNums.map(n => {
+                const isMarked = markedNums.includes(n) ? 'background: #2ecc71; color: white;' : 'background: #fff; color: #333;';
+                return `<div style="padding: 5px 0; border-radius: 5px; font-size: 12px; font-weight: bold; ${isMarked}">${n}</div>`;
+            }).join('');
 
-        gridContainer.innerHTML = flatNums.map(n => {
-            const isMarked = markedNums.includes(n) ? 'background: #2ecc71; color: white;' : 'background: #fff; color: #333;';
-            return `<div style="padding: 5px 0; border-radius: 5px; font-size: 12px; font-weight: bold; ${isMarked}">${n}</div>`;
-        }).join('');
+            document.getElementById('winnerModal').style.display = 'flex';
+            playBingoSound();
 
-        document.getElementById('winnerModal').style.display = 'flex';
-        playBingoSound();
+            let timeLeft = 5;
+            const countdownEl = document.getElementById('modalCountdown');
+            const progressBar = document.getElementById('modalProgressBar');
 
-        let timeLeft = 5;
-        const countdownEl = document.getElementById('modalCountdown');
-        const progressBar = document.getElementById('modalProgressBar');
-
-        if (countdownEl && progressBar) {
-            countdownEl.textContent = timeLeft + 'S';
-            progressBar.style.width = '100%';
-
-            const timer = setInterval(() => {
-                timeLeft--;
+            if (countdownEl && progressBar) {
                 countdownEl.textContent = timeLeft + 'S';
-                progressBar.style.width = (timeLeft / 5 * 100) + '%';
+                progressBar.style.width = '100%';
 
-                if (timeLeft <= 0) {
-                    clearInterval(timer);
-                    window.location.href = '/app/cartelas/';
-                }
-            }, 1000);
+                const timer = setInterval(() => {
+                    timeLeft--;
+                    countdownEl.textContent = timeLeft + 'S';
+                    progressBar.style.width = (timeLeft / 5 * 100) + '%';
+
+                    if (timeLeft <= 0) {
+                        clearInterval(timer);
+                        window.location.href = '/app/cartelas/';
+                    }
+                }, 1000);
+            }
+        } else {
+            // Game ended but no winners (e.g. all players dropped). Redirect immediately.
+            window.location.href = '/app/cartelas/';
         }
         return;
     }
 
-    // 🔊 Voice and Sound
+    // 🔊 3. Voice and Sound
     if (called.length > _lastCalledCount && _lastCalledCount > 0 && last) {
         playCallSound();
         speakAmharic(last);
@@ -185,7 +190,7 @@ async function refreshGame() {
     }
     _lastCalledCount = called.length;
 
-    // ── Update Top UI Bar ──
+    // ── 4. Update Top UI Bar ──
     if (document.getElementById('gameId')) document.getElementById('gameId').textContent = roundData.number ? `R${roundData.number}` : 'R0';
     if (document.getElementById('playersVal')) document.getElementById('playersVal').textContent = roundData.players || 0;
     if (document.getElementById('callVal')) document.getElementById('callVal').textContent = called.length;
@@ -200,10 +205,10 @@ async function refreshGame() {
         document.getElementById('currentCall').textContent = lastDisplay;
     }
 
-    if (document.getElementById('statusText')) document.getElementById('statusText').textContent = roundData.status === 'active' ? 'Game Active!' : 'Waiting for players...';
-    if (document.getElementById('countdown')) document.getElementById('countdown').textContent = roundData.status === 'active' ? 'LIVE' : 'WAITING';
+    if (document.getElementById('statusText')) document.getElementById('statusText').textContent = 'Game Active!';
+    if (document.getElementById('countdown')) document.getElementById('countdown').textContent = 'LIVE';
 
-    // ✅ REPLACE PLAYERS LIST WITH 4 LATEST CALLS
+    // ✅ 5. Last Calls Bar
     if (document.getElementById('playersListText')) {
         const last4 = called.slice(-4);
         function getBingoLetter(num) {
@@ -217,7 +222,7 @@ async function refreshGame() {
         document.getElementById('playersListText').textContent = last4.length > 0 ? `Last Calls: ${last4Text}` : 'Last Calls: None';
     }
 
-    // ── 3. RENDER 1-75 BOARD ──
+    // ── 6. RENDER 1-75 BOARD ──
     const grid = document.getElementById('calledGrid');
     if (grid) {
         grid.innerHTML = Array.from({ length: 75 }, (_, i) => i + 1)
@@ -225,7 +230,7 @@ async function refreshGame() {
             .join('');
     }
 
-    // ── 4. RENDER MULTIPLE CARTELAS OR SPECTATOR MODE ──
+    // ── 7. RENDER CARTELAS OR SPECTATOR MODE ──
     const cartelasContainer = document.getElementById('myCartelasContainer');
 
     if (r.my_cartelas && r.my_cartelas.length > 0) {
@@ -302,6 +307,7 @@ async function claimBingo() {
         beep(220, 0.3, 'square');
         if (tg) tg.showAlert(`❌ ${r.error === 'FALSE_BINGO' ? r.message : r.error}`);
 
+        // If False Bingo, refresh immediately to show Spectator Mode
         if (r.error === 'FALSE_BINGO') {
             setTimeout(() => refreshGame(), 1500);
         }

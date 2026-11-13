@@ -87,8 +87,8 @@ def dashboard_state(request):
 def list_cartelas(request):
     room = _get_room()
 
-    # ✅ CRITICAL FIX: If an active game exists, force the frontend to redirect to the game.
-    # This ensures 100% uniformity. No one can stay in the lobby while a game is playing.
+    # ✅ 1. If an active game exists, force the frontend to redirect to the game screen.
+    # This ensures latecomers become spectators and players stay in sync.
     active_round = GameRound.objects.filter(room=room, status='active').first()
     if active_round:
         return _json({
@@ -100,6 +100,7 @@ def list_cartelas(request):
             'my_balance': str(request.tg_user.balance)
         })
 
+    # 2. Ensure 200 cartelas exist
     cartela_count = Cartela.objects.count()
     if cartela_count > 200:
         ids_to_keep = list(Cartela.objects.order_by('cartela_number').values_list('id', flat=True)[:200])
@@ -109,6 +110,7 @@ def list_cartelas(request):
 
     cartelas = list(Cartela.objects.order_by('cartela_number').values('id', 'cartela_number')[:200])
 
+    # 3. Find or create the waiting round
     round_obj = GameRound.objects.filter(room=room, status='waiting').order_by('-id').first()
 
     if not round_obj:
@@ -168,11 +170,13 @@ def toggle_cartela(request):
             existing = PlayerCartela.objects.filter(round=round_obj, user=user, cartela=c).first()
 
             if existing:
+                # Release Cartela
                 existing.delete()
                 user.balance += stake_amount
                 user.save(update_fields=['balance'])
                 return _json({'ok': True, 'action': 'released', 'balance': str(user.balance)})
             else:
+                # Buy Cartela
                 if PlayerCartela.objects.filter(round=round_obj, cartela=c).exists():
                     return _json({'ok': False, 'error': 'Already sold.'}, 400)
 
@@ -182,6 +186,7 @@ def toggle_cartela(request):
                 user.balance -= stake_amount
                 user.save(update_fields=['balance'])
                 
+                # ✅ 4. Start the 60-second timer on the very first purchase
                 if not round_obj.start_at:
                     round_obj.start_at = timezone.now() + timedelta(seconds=60)
                     round_obj.save(update_fields=['start_at'])
@@ -207,24 +212,26 @@ def cartela_preview(request, cartela_id):
 def game_state(request):
     room = _get_room()
 
+    # ✅ 5. Check if the 60-second timer has expired for the waiting round
     waiting = GameRound.objects.filter(room=room, status='waiting').first()
     if waiting and waiting.start_at and timezone.now() >= waiting.start_at:
         unique_players = PlayerCartela.objects.filter(round=waiting).values('user').distinct().count()
         if unique_players >= 2:
+            # 2+ Players: Start the game!
             waiting.status = 'active'
             waiting.started_at = timezone.now()
             waiting.last_draw_at = timezone.now() - timedelta(seconds=DRAW_INTERVAL_SECONDS + 1)
             waiting.save()
         else:
+            # < 2 Players: Reset timer to 60s
             waiting.start_at = timezone.now() + timedelta(seconds=60)
             waiting.save()
 
     active_round = GameRound.objects.filter(room=room, status='active').order_by('-id').first()
 
     if active_round:
+        # ✅ 6. If players drop below 2 during an active game, end it immediately
         unique_players_in_active = PlayerCartela.objects.filter(round=active_round).values('user').distinct().count()
-        
-        # ✅ FIX: If players drop below 2 in an active game, end it immediately
         if unique_players_in_active < 2:
             active_round.status = 'finished'
             active_round.finished_at = timezone.now()
@@ -244,7 +251,6 @@ def game_state(request):
                         active_round.status = 'finished'
                         active_round.finished_at = timezone.now()
                         active_round.save()
-
                         if winners:
                             _settle_round(active_round, winners)
                         _schedule_next_round(room)
@@ -271,6 +277,7 @@ def game_state(request):
 
         called = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
 
+        # ✅ 7. Latecomers have no PlayerCartela rows -> my_cartelas stays empty -> Spectator Mode
         for p in current_players:
             if p.user.telegram_id == request.tg_user.telegram_id:
                 marked = {int(n) for n in (p.marked_numbers or []) if n is not None}
@@ -399,34 +406,18 @@ def claim_bingo(request):
         if not my_pcs.exists():
             return _json({'ok': False, 'error': 'You are not in this round.'}, 400)
 
-        called_int = set()
-        for n in (round_obj.called_numbers or []):
-            try:
-                called_int.add(int(n))
-            except:
-                pass
-
+        called_int = {int(n) for n in (round_obj.called_numbers or []) if n is not None}
         has_valid_bingo = False
         for pc in my_pcs:
-            try:
-                marked_int = set()
-                for n in (pc.marked_numbers or []):
-                    try:
-                        marked_int.add(int(n))
-                    except:
-                        pass
-
-                cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
-
-                if detect_line(cartela_nums_int, marked_int & called_int):
-                    has_valid_bingo = True
-                    break
-            except Exception as e:
-                print(f"⚠️ Bingo validation error: {e}")
+            marked_int = {int(n) for n in (pc.marked_numbers or []) if n is not None}
+            cartela_nums_int = [[int(n) for n in row] for row in pc.cartela.numbers]
+            if detect_line(cartela_nums_int, marked_int & called_int):
+                has_valid_bingo = True
+                break
 
         if not has_valid_bingo:
             my_pcs.delete()
-            
+            # If players drop below 2, end round
             if PlayerCartela.objects.filter(round=round_obj).values('user').distinct().count() < 2:
                 round_obj.status = 'finished'
                 round_obj.finished_at = timezone.now()
@@ -434,8 +425,7 @@ def claim_bingo(request):
                 _schedule_next_round(room)
 
             return _json({
-                'ok': False,
-                'error': 'FALSE_BINGO',
+                'ok': False, 'error': 'FALSE_BINGO',
                 'message': 'You clicked BINGO without a valid line! You have been removed and are now a spectator.'
             }, 400)
 
@@ -673,7 +663,7 @@ def _tick_room(room):
     if active:
         unique_players_in_active = PlayerCartela.objects.filter(round=active).values('user').distinct().count()
         
-        # ✅ FIX: End the game if players drop below 2
+        # ✅ 8. End the game if players drop below 2
         if unique_players_in_active < 2:
             active.status = 'finished'
             active.finished_at = timezone.now()

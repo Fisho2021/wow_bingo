@@ -7,10 +7,11 @@ let cartelas = [], stake = 0, balance = 0, myCount = 0;
 let timerInterval = null;
 let syncInterval = null;
 
-// ⚠️ REPLACE THESE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY
-// Get them from: Supabase Dashboard → Project Settings → API
+// ⚠️ IMPORTANT: PASTE YOUR SUPABASE URL AND ANON KEY HERE to enable instant WebSockets.
+// Get them from: Supabase Dashboard → Project Settings → API.
+// If left empty, the game will use the 3-second polling fallback.
 const SUPABASE_URL = 'https://pneyxzpsritncwybeptx.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXl4enBzcml0bmN3eWJlcHR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODc3ODEsImV4cCI6MjEwOTI2Mzc4MX0.s4AxK1RWYHgKedUz3L1fh_essDmbc-JLWn7Od4fAY90'; // 👈 THIS MUST BE THE LONG JWT STRING
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXl4enBzcml0bmN3eWJlcHR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODc3ODEsImV4cCI6MjEwOTI2Mzc4MX0.s4AxK1RWYHgKedUz3L1fh_essDmbc-JLWn7Od4fAY90'; // 👈 MUST START WITH 'eyJ' (Long JWT string)
 
 let supabaseClient = null;
 
@@ -48,7 +49,7 @@ async function loadCartelas(isBackgroundSync = false) {
         return;
     }
 
-    // ✅ Uniformity: If game is active, force redirect to the game board
+    // ✅ UNIFORMITY: If the game is active, force redirect to the game board immediately
     if (r.status === 'active') {
         window.location.href = '/app/game/';
         return;
@@ -145,6 +146,9 @@ async function handleCartelaClick(id, element) {
                 playContainer.style.display = 'none';
             }
         }
+        
+        // ✅ FIX: Refresh immediately to start the 60s timer on the screen for the first buyer
+        await loadCartelas(true);
     }
 }
 
@@ -174,10 +178,9 @@ function initSupabase() {
         return;
     }
 
-    // ✅ SAFETY CHECK: Ensure the anon key is valid (not just the project ref)
+    // Safety check for the JWT key
     if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
-        console.error("❌ INVALID SUPABASE ANON KEY. Realtime disabled. Using fast polling instead.");
-        console.error("Please copy the anon key from Supabase Dashboard → Settings → API.");
+        console.warn("⚠️ Invalid or empty Supabase anon key. Realtime disabled. Falling back to 3s polling.");
         return;
     }
 
@@ -216,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Start Supabase Realtime
     initSupabase();
 
-    // 3. Fallback Polling: Every 3 seconds (faster than 5s for better UX)
+    // 3. Fallback Polling: Every 3 seconds to keep timer and purchases in sync
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => loadCartelas(true), 3000);
 
